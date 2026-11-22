@@ -1,12 +1,13 @@
 /**
  * TV Video Player Engine
- * Powered by Hls.js with webOS-tuned memory bounds and TV OSD controls
+ * Powered by Hls.js with webOS-tuned memory bounds, hardware pipeline protection,
+ * and TV OSD controls
  */
 
 import Hls from 'hls.js';
 import { fetchPlaybackAccessToken } from '../api/twitch_gql';
 import { fetchLiveManifest } from '../api/reyohoho_proxy';
-import { createManifestBlobUrl } from './codecs';
+import { createManifestBlobUrl, patchMediaCodecs, isHevcCodec } from './codecs';
 import { getStoredToken } from '../api/twitch_auth';
 
 export class TvPlayer {
@@ -50,13 +51,20 @@ export class TvPlayer {
     this.currentChannel = null;
     this.currentStreamData = null;
     this.currentBlobUrl = null;
+    this.currentRawManifest = null;
+    this.currentSelectedLevel = -1; // -1 = Auto
     this.osdTimeout = null;
     this.statsInterval = null;
+    this.watchdogInterval = null;
     this.isStatsVisible = false;
     this.isQualityDialogVisible = false;
     this.lastUsedProxy = '';
 
+    // Apply global webOS MSE & codec patches immediately
+    patchMediaCodecs();
+
     this._bindEvents();
+    this._startWatchdog();
   }
 
   _bindEvents() {
@@ -198,6 +206,70 @@ export class TvPlayer {
     this.statProxy.textContent = this.lastUsedProxy ? this.lastUsedProxy.replace('https://', '').replace('/', '') : 'ReYohoho';
   }
 
+  /**
+   * Watchdog to prevent decoder lockups and safely recover stalls on Smart TV
+   */
+  _startWatchdog() {
+    let lastTime = -1;
+    let stallSeconds = 0;
+
+    this.watchdogInterval = setInterval(() => {
+      if (!this.isOpen() || this.videoEl.paused || this.videoEl.ended) {
+        lastTime = -1;
+        stallSeconds = 0;
+        return;
+      }
+
+      // If network is loading actively and buffer is empty, let it buffer naturally
+      if (this.videoEl.readyState < 3 && this.videoEl.networkState === 2) {
+        return;
+      }
+
+      const cur = this.videoEl.currentTime;
+      if (cur > 0 && Math.abs(cur - lastTime) < 0.04) {
+        stallSeconds++;
+
+        // At 4 seconds: attempt gentle play without mutating currentTime (never do currentTime += 0.1 on webOS!)
+        if (stallSeconds === 4) {
+          console.warn('[TvPlayer] Watchdog detected stall, gentle play kick...');
+          this.videoEl.play().catch(() => {});
+        }
+
+        // At 8 seconds on 1440p60: decoder lock detected, auto-fallback to stable 1080p60
+        if (stallSeconds >= 8) {
+          console.warn('[TvPlayer] Unrecoverable stall on current level. Resetting to stable 1080p60...');
+          stallSeconds = 0;
+          lastTime = -1;
+          this._fallbackToStableQuality();
+        }
+      } else {
+        lastTime = cur;
+        stallSeconds = 0;
+      }
+    }, 1000);
+  }
+
+  _fallbackToStableQuality() {
+    if (!this.hls || !this.hls.levels) return;
+
+    // Find 1080p or next best AVC level
+    let targetIdx = -1;
+    for (let i = 0; i < this.hls.levels.length; i++) {
+      const lvl = this.hls.levels[i];
+      if (lvl.height <= 1080) {
+        targetIdx = i;
+        break;
+      }
+    }
+
+    if (targetIdx !== -1 && targetIdx !== this.currentSelectedLevel) {
+      this.qualityLabelEl.textContent = '1080p60 (Auto-Stable)';
+      this._selectQualityLevel(targetIdx, '1080p60');
+    } else {
+      this.reload();
+    }
+  }
+
   toggleQualityDialog() {
     if (this.isQualityDialogVisible) {
       this.closeQualityDialog();
@@ -214,35 +286,33 @@ export class TvPlayer {
 
     // Auto option
     const autoBtn = document.createElement('button');
-    autoBtn.className = `dialog-option nav-focusable ${this.hls.autoLevelEnabled ? 'active' : ''}`;
+    const isAutoActive = this.currentSelectedLevel === -1;
+    autoBtn.className = `dialog-option nav-focusable ${isAutoActive ? 'active' : ''}`;
     autoBtn.textContent = 'Авто (Рекомендуется)';
     autoBtn.addEventListener('click', () => {
-      this.hls.currentLevel = -1;
-      this.qualityLabelEl.textContent = 'Auto';
-      this.closeQualityDialog();
+      this._selectQualityLevel(-1, 'Auto');
     });
     this.qualityOptionsEl.appendChild(autoBtn);
 
     // Specific levels
     this.hls.levels.forEach((lvl, idx) => {
       const optBtn = document.createElement('button');
-      const isSelected = !this.hls.autoLevelEnabled && this.hls.currentLevel === idx;
+      const isSelected = this.currentSelectedLevel === idx;
       optBtn.className = `dialog-option nav-focusable ${isSelected ? 'active' : ''}`;
-      
+
       const resLabel = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : lvl.name || `Уровень ${idx}`;
-      const bitrateLabel = lvl.bitrate ? ` (${(lvl.bitrate / 1000000).toFixed(1)} Mbps)` : '';
-      optBtn.textContent = `${resLabel}${bitrateLabel}`;
+      const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
+      const tagLabel = isHevc ? ' [HEVC]' : '';
+      const bitrateLabel = lvl.bitrate ? ` • ${(lvl.bitrate / 1000000).toFixed(1)} Mbps` : '';
+      optBtn.textContent = `${resLabel}${tagLabel}${bitrateLabel}`;
 
       optBtn.addEventListener('click', () => {
-        this.hls.currentLevel = idx;
-        this.qualityLabelEl.textContent = resLabel;
-        this.closeQualityDialog();
+        this._selectQualityLevel(idx, resLabel);
       });
 
       this.qualityOptionsEl.appendChild(optBtn);
     });
 
-    // Auto-focus first option
     if (this.options.onOpenDialog) {
       this.options.onOpenDialog(this.qualityOptionsEl);
     }
@@ -256,11 +326,77 @@ export class TvPlayer {
   }
 
   /**
+   * Safe quality selection with pipeline reinitialization when crossing codec boundaries (AVC <-> HEVC)
+   */
+  _selectQualityLevel(idx, resLabel) {
+    this.closeQualityDialog();
+
+    if (this.currentSelectedLevel === idx) {
+      return;
+    }
+
+    const previousLevelIdx = this.currentSelectedLevel;
+    this.currentSelectedLevel = idx;
+    this.qualityLabelEl.textContent = resLabel;
+
+    // Check if pipeline needs a clean restart:
+    // webOS Starfish GStreamer crashes if HEVC data is fed into an active AVC SourceBuffer.
+    // Switching to/from 1440p60 (or any HEVC level) requires a fresh MediaSource.
+    let needsFullPipelineReset = false;
+    if (idx === -1) {
+      // Auto: safe in-place switch
+      if (this.hls) {
+        this.hls.currentLevel = -1;
+      }
+      return;
+    }
+
+    if (this.hls && this.hls.levels) {
+      const targetLevel = this.hls.levels[idx];
+      const isTargetHevc = targetLevel && (isHevcCodec(targetLevel.videoCodec) || targetLevel.height >= 1440);
+
+      let isCurrentHevc = false;
+      if (previousLevelIdx >= 0 && this.hls.levels[previousLevelIdx]) {
+        const curLevel = this.hls.levels[previousLevelIdx];
+        isCurrentHevc = isHevcCodec(curLevel.videoCodec) || curLevel.height >= 1440;
+      }
+
+      if (isTargetHevc !== isCurrentHevc || isTargetHevc) {
+        needsFullPipelineReset = true;
+      }
+    }
+
+    if (needsFullPipelineReset && this.currentBlobUrl) {
+      console.log(`[TvPlayer] Codec boundary switch detected. Performing clean hardware pipeline reset for level ${idx} (${resLabel})...`);
+      this.showSpinner();
+      this._cleanPipelineRestart(this.currentBlobUrl, idx);
+    } else if (this.hls) {
+      this.hls.currentLevel = idx;
+    }
+  }
+
+  _cleanPipelineRestart(blobUrl, startLevelIdx) {
+    if (this.hls) {
+      this.hls.destroy();
+      this.hls = null;
+    }
+
+    // Clean video element state
+    this.videoEl.pause();
+    this.videoEl.removeAttribute('src');
+    this.videoEl.load();
+
+    // Reinitialize Hls directly with target startLevel
+    this._initHls(blobUrl, startLevelIdx);
+  }
+
+  /**
    * Launch a stream
    */
   async playStream(streamData) {
     this.currentStreamData = streamData;
     this.currentChannel = streamData.userLogin;
+    this.currentSelectedLevel = -1; // reset to auto
 
     // Show player
     this.containerEl.classList.remove('hidden');
@@ -283,6 +419,7 @@ export class TvPlayer {
       // 2. Fetch live master playlist via ReYohoho proxy
       const { manifest, serverUrl } = await fetchLiveManifest(this.currentChannel, sig, token);
       this.lastUsedProxy = serverUrl;
+      this.currentRawManifest = manifest;
 
       // 3. Patch codecs and create blob URL
       if (this.currentBlobUrl) {
@@ -290,8 +427,8 @@ export class TvPlayer {
       }
       this.currentBlobUrl = createManifestBlobUrl(manifest);
 
-      // 4. Initialize Hls.js with webOS-safe limits
-      this._initHls(this.currentBlobUrl);
+      // 4. Initialize Hls.js with TV-safe limits
+      this._initHls(this.currentBlobUrl, -1);
     } catch (err) {
       console.error('[TvPlayer] Playback start failed:', err);
       this.hideSpinner();
@@ -300,7 +437,7 @@ export class TvPlayer {
     }
   }
 
-  _initHls(srcUrl) {
+  _initHls(srcUrl, startLevel = -1) {
     if (this.hls) {
       this.hls.destroy();
       this.hls = null;
@@ -308,18 +445,29 @@ export class TvPlayer {
 
     if (Hls.isSupported()) {
       this.hls = new Hls({
-        // webOS TV hardware bounds to prevent memory bloat and decoder stalling
-        maxBufferLength: 8,
-        maxMaxBufferLength: 12,
-        maxBufferSize: 20 * 1024 * 1024, // 20 MB RAM buffer
+        // CRITICAL FOR WEBOS:
+        // 1. enableWorker: false eliminates worker thread IPC overhead on ARM dual/quad-core TV CPUs
+        enableWorker: false,
+
+        // 2. Memory-safe buffer limits (prevents TV RAM exhaustion and dropped frames on 1440p)
+        maxBufferLength: 6,
+        maxMaxBufferLength: 10,
+        maxBufferSize: 12 * 1024 * 1024, // 12 MB buffer cap
         backBufferLength: 3,             // Aggressively flush passed frames for GPU memory
         liveBackBufferLength: 3,
-        frontBufferFlushThreshold: 20,
+        frontBufferFlushThreshold: 12,
         lowLatencyMode: false,
-        highBufferWatchdogPeriod: 2,
-        nudgeOffset: 0.1,
-        nudgeMaxRetry: 5,
-        enableWorker: true
+
+        // 3. Disable Hls.js internal nudging (which triggers synchronous IPC SeekTo deadlocks on webOS)
+        highBufferWatchdogPeriod: 0,
+        nudgeMaxRetry: 0,
+
+        // Network timeouts
+        fragLoadingTimeOut: 20000,
+        manifestLoadingTimeOut: 15000,
+        levelLoadingTimeOut: 15000,
+
+        startLevel: startLevel
       });
 
       this.hls.loadSource(srcUrl);
@@ -328,15 +476,12 @@ export class TvPlayer {
       this.hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
         console.log('[TvPlayer] Manifest parsed with levels:', data.levels.length);
         this.videoEl.play().catch(e => {
-          console.warn('[TvPlayer] Autoplay prevented, requires user action:', e);
+          console.warn('[TvPlayer] Autoplay prevented, waiting for user action:', e);
         });
 
-        // Set default label if top level is 1440p
-        if (data.levels && data.levels.length > 0) {
-          const top = data.levels[0];
-          if (top.height >= 1440) {
-            this.qualityLabelEl.textContent = '1440p60';
-          }
+        if (startLevel >= 0 && data.levels[startLevel]) {
+          const lvl = data.levels[startLevel];
+          this.qualityLabelEl.textContent = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Custom';
         }
       });
 
@@ -344,7 +489,11 @@ export class TvPlayer {
         const lvl = this.hls.levels[data.level];
         if (lvl) {
           const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Auto';
-          this.qualityLabelEl.textContent = this.hls.autoLevelEnabled ? `Auto (${res})` : res;
+          if (this.currentSelectedLevel === -1) {
+            this.qualityLabelEl.textContent = `Auto (${res})`;
+          } else {
+            this.qualityLabelEl.textContent = res;
+          }
         }
       });
 
@@ -353,22 +502,21 @@ export class TvPlayer {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[TvPlayer] Fatal network error, recovering...');
+              console.log('[TvPlayer] Fatal network error, reloading...');
               this.hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[TvPlayer] Fatal media error, recovering...');
+              console.log('[TvPlayer] Fatal media error, recovering media...');
               this.hls.recoverMediaError();
               break;
             default:
-              console.error('[TvPlayer] Unrecoverable error, reloading stream...');
-              this.reload();
+              console.error('[TvPlayer] Unrecoverable error, falling back to stable quality...');
+              this._fallbackToStableQuality();
               break;
           }
         }
       });
     } else if (this.videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native Safari/HLS fallback
       this.videoEl.src = srcUrl;
       this.videoEl.play().catch(() => {});
     }

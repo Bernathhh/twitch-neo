@@ -1,35 +1,143 @@
 /**
- * Video Codec Normalizer & Manifest Patcher for LG webOS TV
+ * Video Codec Normalizer & Hardware Pipeline Patcher for LG webOS TV
  *
- * Fixes:
- * 1. Twitch 1440p60 HEVC non-standard hev1 + trailing zeros -> hvc1.1.6.L150.B0 / hvc1.1.6.L93.B0
- * 2. AVC Level 5.x -> avc1.64002a (Level 4.2 High Profile, standard TV hardware maximum)
- * 3. Removes unsupported AV1 (av01) streams that cause black screen / decoder stall on webOS
+ * Provides:
+ * 1. Global MSE hooks: MediaSource.isTypeSupported, ManagedMediaSource.isTypeSupported,
+ *    and MediaSource.prototype.addSourceBuffer fallback chain.
+ * 2. Complete removal of AV1 (av01 / av1) streams to prevent software decoding OOM.
+ * 3. Normalization of Twitch HEVC (hev1.1.6.L150.90.0.0.0.0.0) -> hvc1.1.6.L150.B0 / hvc1.1.6.L93.B0.
+ * 4. Clamping of high-profile AVC Level 5.x -> Level 4.2 (avc1.64002a).
  */
 
-export function getSupportedHevcCodec() {
-  const candidates = [
-    'hvc1.1.6.L150.B0', // Level 5.0 Main Tier (Standard for 1440p60)
-    'hvc1.1.6.L153.B0', // Level 5.1 Main Tier
-    'hvc1.1.6.L120.B0', // Level 4.0
-    'hvc1.1.6.L93.B0',  // Level 3.1 Main Tier (Universal webOS fallback)
-    'hev1.1.6.L150.B0'
-  ];
+export function isAv1Codec(type) {
+  if (typeof type !== 'string') return false;
+  const lower = type.toLowerCase();
+  return lower.includes('av01') || (lower.includes('av1') && !lower.includes('avc1'));
+}
 
-  if (typeof MediaSource !== 'undefined' && typeof MediaSource.isTypeSupported === 'function') {
-    for (const c of candidates) {
-      try {
-        if (MediaSource.isTypeSupported(`video/mp4; codecs="${c}"`)) {
-          return c;
-        }
-      } catch (e) {
-        // ignore
-      }
+export function isHevcCodec(type) {
+  if (typeof type !== 'string') return false;
+  const lower = type.toLowerCase();
+  return lower.includes('hev1') || lower.includes('hvc1');
+}
+
+export function cleanHevcCodec(type) {
+  if (typeof type !== 'string') return type;
+  return type.replace(
+    /(hev1|hvc1)\.([1-9]\d*)\.([\da-fA-F]+)\.([LH]\d+)\.([\da-fA-F]+)(?:\.[\da-fA-F]+)+/g,
+    '$1.$2.$3.$4.$5'
+  );
+}
+
+export function checkHevcSupported(origFn, context, type) {
+  if (typeof origFn !== 'function') return false;
+  try {
+    if (origFn.call(context, type)) return true;
+    if (typeof type === 'string') {
+      const cleaned = cleanHevcCodec(type);
+      if (cleaned !== type && origFn.call(context, cleaned)) return true;
+
+      const swapped = cleaned.includes('hev1')
+        ? cleaned.replace(/hev1/g, 'hvc1')
+        : cleaned.replace(/hvc1/g, 'hev1');
+      if (origFn.call(context, swapped)) return true;
+
+      // Universal baseline L93.B0 supported across webOS Starfish GStreamer
+      const l93 = swapped.replace(/(hvc1|hev1)(?:\.[^",]+)?/g, 'hvc1.1.6.L93.B0');
+      if (origFn.call(context, l93)) return true;
+
+      if (origFn.call(context, 'video/mp4; codecs="hvc1.1.6.L93.B0"')) return true;
+      if (origFn.call(context, 'video/mp4; codecs="hvc1"')) return true;
+      if (origFn.call(context, 'video/mp4; codecs="hev1"')) return true;
     }
+  } catch (e) {
+    // ignore
+  }
+  return false;
+}
+
+/**
+ * Patch global MediaSource and ManagedMediaSource implementations
+ */
+export function patchMediaCodecs() {
+  if (typeof window === 'undefined') return;
+
+  // 1. MediaSource.isTypeSupported
+  try {
+    if (typeof window.MediaSource !== 'undefined' && typeof window.MediaSource.isTypeSupported === 'function') {
+      const origIsTypeSupported = window.MediaSource.isTypeSupported;
+      window.MediaSource.isTypeSupported = function (type) {
+        if (isAv1Codec(type)) return false;
+        if (isHevcCodec(type)) return checkHevcSupported(origIsTypeSupported, window.MediaSource, type);
+        if (typeof type === 'string' && type.includes('avc1')) {
+          if (origIsTypeSupported.call(window.MediaSource, type)) return true;
+          const normAvc = type.replace(/(avc1\.[0-9a-fA-F]{4})3[0-9a-fA-F]/g, '$12a');
+          if (normAvc !== type && origIsTypeSupported.call(window.MediaSource, normAvc)) return true;
+        }
+        return origIsTypeSupported.call(window.MediaSource, type);
+      };
+    }
+  } catch (err) {
+    console.warn('[Codecs] Failed to patch MediaSource.isTypeSupported', err);
   }
 
-  // Fallback to Level 5.0 (supports 2560x1440@60)
-  return 'hvc1.1.6.L150.B0';
+  // 2. MediaSource.prototype.addSourceBuffer
+  try {
+    if (typeof window.MediaSource !== 'undefined' && window.MediaSource.prototype && typeof window.MediaSource.prototype.addSourceBuffer === 'function') {
+      const origAddSourceBuffer = window.MediaSource.prototype.addSourceBuffer;
+      window.MediaSource.prototype.addSourceBuffer = function (type) {
+        let targetType = type;
+        try {
+          return origAddSourceBuffer.call(this, targetType);
+        } catch (err1) {
+          if (typeof targetType === 'string') {
+            if (isHevcCodec(targetType)) {
+              const hasAudio = targetType.includes('mp4a');
+              const cleaned = cleanHevcCodec(targetType);
+              if (cleaned !== targetType) {
+                try { return origAddSourceBuffer.call(this, cleaned); } catch (e) {}
+              }
+              const swapped = cleaned.includes('hev1')
+                ? cleaned.replace(/hev1/g, 'hvc1')
+                : cleaned.replace(/hvc1/g, 'hev1');
+              try { return origAddSourceBuffer.call(this, swapped); } catch (e) {}
+
+              const l93 = swapped.replace(/(hvc1|hev1)(?:\.[^",]+)?/g, 'hvc1.1.6.L93.B0');
+              try { return origAddSourceBuffer.call(this, l93); } catch (e) {}
+
+              const fallbacks = [
+                hasAudio ? 'video/mp4; codecs="hvc1.1.6.L93.B0,mp4a.40.2"' : 'video/mp4; codecs="hvc1.1.6.L93.B0"',
+                hasAudio ? 'video/mp4; codecs="hvc1,mp4a.40.2"' : 'video/mp4; codecs="hvc1"',
+                hasAudio ? 'video/mp4; codecs="hev1,mp4a.40.2"' : 'video/mp4; codecs="hev1"',
+                'video/mp4; codecs="hevc"'
+              ];
+              for (const fb of fallbacks) {
+                try { return origAddSourceBuffer.call(this, fb); } catch (e) {}
+              }
+            }
+
+            if (targetType.includes('avc1')) {
+              const normAvc = targetType.replace(/(avc1\.[0-9a-fA-F]{4})3[0-9a-fA-F]/g, '$12a');
+              if (normAvc !== targetType) {
+                try { return origAddSourceBuffer.call(this, normAvc); } catch (e) {}
+              }
+              const avcFallbacks = [
+                'video/mp4; codecs="avc1.64002a,mp4a.40.2"',
+                'video/mp4; codecs="avc1.4d002a,mp4a.40.2"',
+                'video/mp4; codecs="avc1.42e01e,mp4a.40.2"'
+              ];
+              for (const fb of avcFallbacks) {
+                try { return origAddSourceBuffer.call(this, fb); } catch (e) {}
+              }
+            }
+          }
+          throw err1;
+        }
+      };
+    }
+  } catch (err) {
+    console.warn('[Codecs] Failed to patch MediaSource.prototype.addSourceBuffer', err);
+  }
 }
 
 /**
@@ -38,7 +146,6 @@ export function getSupportedHevcCodec() {
 export function patchMasterManifest(manifestText) {
   if (!manifestText || typeof manifestText !== 'string') return manifestText;
 
-  const targetHevcCodec = getSupportedHevcCodec();
   const lines = manifestText.split('\n');
   const result = [];
 
@@ -46,7 +153,7 @@ export function patchMasterManifest(manifestText) {
     const line = lines[i];
 
     // Strip unsupported AV1 streams completely
-    if (line.startsWith('#EXT-X-STREAM-INF:') && line.includes('av01')) {
+    if (line.startsWith('#EXT-X-STREAM-INF:') && (line.includes('av01') || (line.includes('av1') && !line.includes('avc1')))) {
       if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
         i++; // skip next line containing stream URL
       }
@@ -57,9 +164,10 @@ export function patchMasterManifest(manifestText) {
       const patchedLine = line.replace(/CODECS="([^"]+)"/, (_match, codecsAttr) => {
         const tokens = codecsAttr.split(',').map(t => t.trim());
         const patchedTokens = tokens.map(token => {
-          // Normalize HEVC
+          // Normalize Twitch HEVC
           if (token.startsWith('hev1') || token.startsWith('hvc1')) {
-            return targetHevcCodec;
+            // Trim non-standard constraint flags and normalize to hvc1.1.6.L150.B0
+            return 'hvc1.1.6.L150.B0';
           }
           // Clamp AVC levels above 4.2 to 4.2 (avc1.64002a)
           if (token.startsWith('avc1.')) {

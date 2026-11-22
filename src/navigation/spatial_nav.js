@@ -1,5 +1,6 @@
 /**
  * 2D Spatial Navigation Engine for LG webOS TV Remote & D-pad
+ * Optimized for low-latency TV input and zero-jank frame rates
  */
 
 export class SpatialNavigation {
@@ -7,6 +8,7 @@ export class SpatialNavigation {
     this.currentFocused = null;
     this.backHandlers = [];
     this.isListening = false;
+    this.lastMoveTime = 0;
 
     this._handleKeyDown = this._handleKeyDown.bind(this);
   }
@@ -41,24 +43,40 @@ export class SpatialNavigation {
 
   /**
    * Get all currently visible and focusable DOM elements
+   * Scoped to active UI layers to keep candidate pool small and fast
    */
-  getFocusableElements(container = document) {
-    const selector = '.nav-focusable:not([disabled])';
-    const all = Array.from(container.querySelectorAll(selector));
-    return all.filter(el => {
-      // Must be visible in DOM
-      if (el.offsetParent === null && el.offsetWidth === 0 && el.offsetHeight === 0) {
-        return false;
+  getFocusableElements() {
+    // 1. If Quality Dialog is open, only navigate inside it
+    const qualityDialog = document.getElementById('quality-dialog');
+    if (qualityDialog && !qualityDialog.classList.contains('hidden')) {
+      return Array.from(qualityDialog.querySelectorAll('.nav-focusable:not([disabled])'));
+    }
+
+    // 2. If Player OSD is open, navigate player controls
+    const playerContainer = document.getElementById('player-container');
+    if (playerContainer && !playerContainer.classList.contains('hidden')) {
+      const osd = document.getElementById('player-osd');
+      if (osd && !osd.classList.contains('hidden')) {
+        return Array.from(osd.querySelectorAll('.nav-focusable:not([disabled])'));
       }
-      // Check if inside a hidden ancestor
-      let parent = el.parentElement;
-      while (parent && parent !== document.body) {
-        if (parent.classList.contains('hidden') || parent.style.display === 'none') {
-          return false;
-        }
-        parent = parent.parentElement;
-      }
-      return true;
+      return [];
+    }
+
+    // 3. Otherwise: Sidebar + Active View Section only (fastest & cleanest)
+    const activeView = document.querySelector('.view-section.active');
+    const sidebar = document.querySelector('.sidebar');
+
+    const focusables = [];
+    if (sidebar) {
+      focusables.push(...sidebar.querySelectorAll('.nav-focusable:not([disabled])'));
+    }
+    if (activeView) {
+      focusables.push(...activeView.querySelectorAll('.nav-focusable:not([disabled])'));
+    }
+
+    // Filter elements with non-zero dimensions
+    return focusables.filter(el => {
+      return el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0;
     });
   }
 
@@ -76,8 +94,9 @@ export class SpatialNavigation {
 
     if (scroll) {
       try {
+        // 'auto' scrolling is hardware accelerated on webOS, 'smooth' lags severely
         el.scrollIntoView({
-          behavior: 'smooth',
+          behavior: 'auto',
           block: 'nearest',
           inline: 'nearest'
         });
@@ -106,7 +125,8 @@ export class SpatialNavigation {
     let bestCandidate = null;
     let minScore = Infinity;
 
-    for (const target of focusables) {
+    for (let i = 0; i < focusables.length; i++) {
+      const target = focusables[i];
       if (target === this.currentFocused) continue;
 
       const r = target.getBoundingClientRect();
@@ -149,8 +169,8 @@ export class SpatialNavigation {
       }
 
       if (isValidDirection) {
-        // Weighted Manhattan distance with heavy penalty for secondary axis spread
-        const score = dPrimary + (dSecondary * 2.5);
+        // Weighted distance calculation
+        const score = dPrimary + (dSecondary * 2.2);
         if (score < minScore) {
           minScore = score;
           bestCandidate = target;
@@ -166,25 +186,24 @@ export class SpatialNavigation {
   _handleKeyDown(e) {
     const keyCode = e.keyCode || e.which;
 
-    // Remote D-pad arrow keys
-    if (e.key === 'ArrowUp' || keyCode === 38) {
+    // Remote D-pad arrow keys (throttled to ~60ms to prevent event backlog)
+    const now = Date.now();
+    const isArrow = e.key === 'ArrowUp' || keyCode === 38 ||
+                    e.key === 'ArrowDown' || keyCode === 40 ||
+                    e.key === 'ArrowLeft' || keyCode === 37 ||
+                    e.key === 'ArrowRight' || keyCode === 39;
+
+    if (isArrow) {
       e.preventDefault();
-      this.move('up');
-      return;
-    }
-    if (e.key === 'ArrowDown' || keyCode === 40) {
-      e.preventDefault();
-      this.move('down');
-      return;
-    }
-    if (e.key === 'ArrowLeft' || keyCode === 37) {
-      e.preventDefault();
-      this.move('left');
-      return;
-    }
-    if (e.key === 'ArrowRight' || keyCode === 39) {
-      e.preventDefault();
-      this.move('right');
+      if (now - this.lastMoveTime < 50) {
+        return; // debounce rapid key repetitions
+      }
+      this.lastMoveTime = now;
+
+      if (e.key === 'ArrowUp' || keyCode === 38) this.move('up');
+      else if (e.key === 'ArrowDown' || keyCode === 40) this.move('down');
+      else if (e.key === 'ArrowLeft' || keyCode === 37) this.move('left');
+      else if (e.key === 'ArrowRight' || keyCode === 39) this.move('right');
       return;
     }
 
