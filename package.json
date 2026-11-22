@@ -1,6 +1,6 @@
 {
   "name": "twitch-neo",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Next-generation native Twitch client for LG webOS TVs with 1440p60 and ad-free playback",
   "main": "dist/index.html",
   "scripts": {

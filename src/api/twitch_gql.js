@@ -239,9 +239,9 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
     }
   `;
 
-  // 'site' provides full unthrottled source stream up to 1440p60 HEVC/AVC
-  // 'embed' and 'popout' as fallbacks (thunderdome was removed because Twitch hard-caps it to 480p)
-  const playerTypes = ['site', 'embed', 'popout'];
+  // 'popout' has full unthrottled 1440p60 HEVC/AVC and avoids Twitch SSAI midrolls
+  // 'embed' and 'site' as fallbacks
+  const playerTypes = ['popout', 'embed', 'site'];
 
   for (const pt of playerTypes) {
     try {
