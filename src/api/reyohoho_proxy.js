@@ -44,9 +44,6 @@ export async function testProxyPing(serverUrl) {
   try {
     const res = await fetch(checkUrl, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0'
-      },
       signal: controller.signal
     });
 
@@ -97,9 +94,6 @@ export async function fetchLiveManifest(channelLogin, sig, token) {
 
       const res = await fetch(fullUrl, {
         method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0'
-        },
         signal: controller.signal
       });
 

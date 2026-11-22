@@ -295,8 +295,8 @@ export class TvPlayer {
     } catch (err) {
       console.error('[TvPlayer] Playback start failed:', err);
       this.hideSpinner();
-      alert(`Ошибка запуска стрима: ${err.message}`);
-      this.close();
+      this.streamTitleEl.textContent = `Ошибка загрузки стрима: ${err.message}. Нажмите кнопку перезагрузки для повтора.`;
+      this.showOsd();
     }
   }
 

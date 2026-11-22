@@ -229,8 +229,8 @@ export async function searchChannels(userQuery) {
  */
 export async function fetchPlaybackAccessToken(channelLogin, token = null) {
   const query = `
-    query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!) {
-      streamPlaybackAccessToken(channelName: $login, params: {platform: "web", playerBackend: "mediaplayer", playerType: $playerType}) @include(if: $isLive) {
+    query GetPlaybackToken($login: String!, $playerType: String!) {
+      streamPlaybackAccessToken(channelName: $login, params: {platform: "web", playerBackend: "mediaplayer", playerType: $playerType}) {
         value
         signature
         __typename
@@ -240,9 +240,6 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
 
   const variables = {
     login: channelLogin,
-    isLive: true,
-    vodID: '',
-    isVod: false,
     playerType: 'site'
   };
 

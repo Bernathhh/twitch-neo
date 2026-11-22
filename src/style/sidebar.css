@@ -1,5 +1,5 @@
 /**
- * Twitch TV Native - Sidebar Navigation
+ * Twitch Neo - Sidebar Navigation
  */
 
 .sidebar {
@@ -10,13 +10,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 0 20px 0;
+  padding: 32px 0 24px 0;
   z-index: 40;
   flex-shrink: 0;
 }
 
 .sidebar-header {
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
 
 .twitch-logo {
@@ -28,15 +28,15 @@
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   width: 100%;
   align-items: center;
 }
 
 .nav-item {
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
+  width: 74px;
+  height: 74px;
+  border-radius: 14px;
   background: transparent;
   border: none;
   color: var(--text-secondary);
@@ -44,7 +44,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   position: relative;
 }
 
@@ -56,7 +56,7 @@
 
 .nav-item.active {
   color: var(--brand-purple-light);
-  background-color: rgba(145, 70, 255, 0.15);
+  background-color: rgba(145, 70, 255, 0.18);
 }
 
 .nav-item.active::before {
@@ -65,19 +65,19 @@
   left: 0;
   top: 14px;
   bottom: 14px;
-  width: 4px;
+  width: 5px;
   background-color: var(--brand-purple);
   border-radius: 0 4px 4px 0;
 }
 
 .nav-icon {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
 }
 
 .nav-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -89,8 +89,8 @@
 }
 
 .auth-avatar-placeholder {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background-color: var(--bg-elevated);
   display: flex;
@@ -99,8 +99,8 @@
 }
 
 .auth-user-avatar-mini {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 2px solid var(--brand-purple);
   object-fit: cover;
