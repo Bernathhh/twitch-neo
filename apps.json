@@ -1,0 +1,35 @@
+{
+  "packages": [
+    {
+      "id": "tv.twitch.neo",
+      "title": "Twitch Neo",
+      "iconUri": "https://raw.githubusercontent.com/Bernathhh/twitch-neo/main/assets/largeIcon.png",
+      "manifestUrl": "https://github.com/Bernathhh/twitch-neo/releases/download/v1.0.0/twitch.neo.manifest.json",
+      "manifest": {
+        "id": "tv.twitch.neo",
+        "version": "1.0.0",
+        "type": "web",
+        "title": "Twitch Neo",
+        "appDescription": "Next-generation lightweight Twitch client for LG webOS TVs with 1440p60 and ad-free playback",
+        "iconUri": "https://raw.githubusercontent.com/Bernathhh/twitch-neo/main/assets/largeIcon.png",
+        "sourceUrl": "https://github.com/Bernathhh/twitch-neo",
+        "rootRequired": false,
+        "ipkUrl": "https://github.com/Bernathhh/twitch-neo/releases/download/v1.0.0/tv.twitch.neo_1.0.0_all.ipk",
+        "ipkHash": {
+          "sha256": "f9033c54a37d249e73faae5d14289cef80ac872c0327f5b2e9c130652a4d5152"
+        },
+        "ipkSize": 389972
+      },
+      "pool": "main",
+      "screenshots": [
+        {
+          "url": "https://raw.githubusercontent.com/Bernathhh/twitch-neo/main/assets/splash.png",
+          "caption": "Twitch Neo Splash Screen",
+          "width": 1920,
+          "height": 1080
+        }
+      ],
+      "shortDescription": "Next-generation lightweight Twitch client for LG webOS TVs with 1440p60 and ad-free playback"
+    }
+  ]
+}
