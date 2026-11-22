@@ -50,6 +50,11 @@ export class TvPlayer {
     this.statDropped = document.getElementById('stat-dropped');
     this.statProxy = document.getElementById('stat-proxy');
 
+    // Quality Toast Notification in corner
+    this.qualityToastEl = document.getElementById('quality-toast');
+    this.qualityToastValueEl = document.getElementById('quality-toast-value');
+    this.toastTimeout = null;
+
     this.currentChannel = null;
     this.currentStreamData = null;
     this.currentBlobUrl = null;
@@ -81,6 +86,16 @@ export class TvPlayer {
       this.hideSpinner();
       this.iconPlay.classList.add('hidden');
       this.iconPause.classList.remove('hidden');
+
+      // Trigger corner quality notification on stream playback
+      if (this.hls && this.hls.currentLevel >= 0 && this.hls.levels[this.hls.currentLevel]) {
+        const lvl = this.hls.levels[this.hls.currentLevel];
+        const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : '';
+        const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
+        if (res) {
+          this.showQualityToast(`${res}${isHevc ? ' [HEVC]' : ''}`);
+        }
+      }
     });
 
     this.videoEl.addEventListener('pause', () => {
@@ -124,6 +139,32 @@ export class TvPlayer {
     if (this.isQualityDialogVisible) return;
     this.osdEl.classList.remove('visible');
     this.osdEl.classList.add('hidden');
+  }
+
+  showQualityToast(label) {
+    if (!this.qualityToastEl || !this.qualityToastValueEl) return;
+    if (!label || label === '-' || label === 'Auto') return;
+
+    let formatted = label;
+    if (formatted.includes('[HEVC]')) {
+      formatted = formatted.replace('[HEVC]', '<span class="hevc-badge">HEVC</span>');
+    }
+
+    this.qualityToastValueEl.innerHTML = formatted;
+    this.qualityToastEl.classList.remove('hidden');
+    this.qualityToastEl.classList.remove('toast-hide');
+
+    clearTimeout(this.toastTimeout);
+    this.toastTimeout = setTimeout(() => {
+      if (this.qualityToastEl) {
+        this.qualityToastEl.classList.add('toast-hide');
+        setTimeout(() => {
+          if (this.qualityToastEl && this.qualityToastEl.classList.contains('toast-hide')) {
+            this.qualityToastEl.classList.add('hidden');
+          }
+        }, 400);
+      }
+    }, 3800);
   }
 
   toggleOsd() {
@@ -376,6 +417,7 @@ export class TvPlayer {
 
     this.currentSelectedLevel = idx;
     this.qualityLabelEl.textContent = resLabel;
+    this.showQualityToast(resLabel);
 
     if (idx === -1) {
       // Auto
@@ -515,7 +557,10 @@ export class TvPlayer {
 
         if (startLevel >= 0 && data.levels[startLevel]) {
           const lvl = data.levels[startLevel];
-          this.qualityLabelEl.textContent = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Custom';
+          const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Custom';
+          const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
+          this.qualityLabelEl.textContent = res;
+          this.showQualityToast(`${res}${isHevc ? ' [HEVC]' : ''}`);
         }
       });
 
@@ -523,11 +568,14 @@ export class TvPlayer {
         const lvl = this.hls.levels[data.level];
         if (lvl) {
           const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Auto';
+          const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
+          const fullLabel = `${res}${isHevc ? ' [HEVC]' : ''}`;
           if (this.currentSelectedLevel === -1) {
             this.qualityLabelEl.textContent = `Auto (${res})`;
           } else {
             this.qualityLabelEl.textContent = res;
           }
+          this.showQualityToast(fullLabel);
         }
       });
 
@@ -565,6 +613,12 @@ export class TvPlayer {
   close() {
     this._stopStatsLoop();
     this.closeQualityDialog();
+
+    if (this.qualityToastEl) {
+      clearTimeout(this.toastTimeout);
+      this.qualityToastEl.classList.add('toast-hide');
+      this.qualityToastEl.classList.add('hidden');
+    }
 
     if (this.hls) {
       this.hls.destroy();
