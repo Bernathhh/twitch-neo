@@ -23,7 +23,7 @@ fs.writeFileSync(
       title: 'Twitch Neo',
       appDescription: 'Next-generation lightweight Twitch client for LG webOS TVs with 1440p60 and ad-free playback',
       iconUri: 'icon.png',
-      sourceUrl: 'https://github.com/Bernathhh/twitch-webos-native',
+      sourceUrl: 'https://github.com/Bernathhh/twitch-neo',
       rootRequired: false,
       ipkUrl: ipkfile,
       ipkHash: {

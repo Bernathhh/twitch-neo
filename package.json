@@ -1,5 +1,5 @@
 {
-  "name": "twitch-webos-native",
+  "name": "twitch-neo",
   "version": "1.0.0",
   "description": "Next-generation native Twitch client for LG webOS TVs with 1440p60 and ad-free playback",
   "main": "dist/index.html",
@@ -7,7 +7,7 @@
     "build": "webpack --mode=production",
     "dev": "webpack serve --mode=development",
     "package": "ares-package -n dist",
-    "manifest": "node tools/gen-manifest.cjs twitch.native.webos.manifest.json",
+    "manifest": "node tools/gen-manifest.cjs twitch.neo.manifest.json",
     "release": "npm run build && npm run package && npm run manifest"
   },
   "keywords": [
