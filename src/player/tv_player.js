@@ -301,8 +301,15 @@ export class TvPlayer {
 
     let activeOptionBtn = null;
 
-    // Specific levels: Highest resolution first for Smart TV users
-    const sortedIndices = [...Array(this.hls.levels.length).keys()].reverse();
+    // Specific levels: Highest resolution first (e.g. 1440p60 -> 1080p60 -> 720p60 -> 480p)
+    const sortedIndices = [...Array(this.hls.levels.length).keys()].sort((a, b) => {
+      const lvlA = this.hls.levels[a];
+      const lvlB = this.hls.levels[b];
+      const heightA = lvlA.height || 0;
+      const heightB = lvlB.height || 0;
+      if (heightB !== heightA) return heightB - heightA;
+      return (lvlB.bitrate || 0) - (lvlA.bitrate || 0);
+    });
 
     sortedIndices.forEach((idx) => {
       const lvl = this.hls.levels[idx];

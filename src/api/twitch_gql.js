@@ -239,8 +239,9 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
     }
   `;
 
-  // thunderdome & frontpage do not receive Twitch mid-roll commercial breaks
-  const playerTypes = ['thunderdome', 'frontpage', 'embed', 'site'];
+  // 'site' provides full unthrottled source stream up to 1440p60 HEVC/AVC
+  // 'embed' and 'popout' as fallbacks (thunderdome was removed because Twitch hard-caps it to 480p)
+  const playerTypes = ['site', 'embed', 'popout'];
 
   for (const pt of playerTypes) {
     try {
