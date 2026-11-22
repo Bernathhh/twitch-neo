@@ -1,7 +1,7 @@
 {
   "id": "tv.twitch.neo",
   "version": "1.0.0",
-  "vendor": "Bernath",
+  "vendor": "Pavel Bernat",
   "type": "web",
   "main": "index.html",
   "title": "Twitch Neo",
