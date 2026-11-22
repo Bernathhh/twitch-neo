@@ -290,3 +290,79 @@ html, body {
   color: #fff;
   border-color: var(--brand-purple-light);
 }
+
+/* App Startup Splash Overlay */
+.app-splash-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #08080a;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+}
+
+.app-splash-overlay.splash-fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.splash-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.splash-logo-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.splash-badge {
+  position: absolute;
+  bottom: -8px;
+  right: -16px;
+  background: linear-gradient(135deg, #00E5FF, #9146FF);
+  color: #08080a;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.7);
+}
+
+.splash-title {
+  font-size: 44px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 1.5px;
+  margin-bottom: 12px;
+}
+
+.splash-author {
+  font-size: 20px;
+  color: #efeff1;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.splash-author strong {
+  color: #00E5FF;
+}
+
+.splash-repo {
+  font-size: 16px;
+  color: var(--brand-purple-light);
+  letter-spacing: 0.5px;
+}

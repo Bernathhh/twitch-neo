@@ -131,6 +131,15 @@ class TwitchNativeApp {
     // Load initial home view
     await this.loadHome();
 
+    // Dismiss startup splash overlay
+    const splashOverlay = document.getElementById('app-splash-overlay');
+    if (splashOverlay) {
+      setTimeout(() => {
+        splashOverlay.classList.add('splash-fade-out');
+        setTimeout(() => splashOverlay.remove(), 600);
+      }, 500);
+    }
+
     // Set initial focus
     const firstItem = document.querySelector('.sidebar-nav .nav-item[data-section="home"]');
     if (firstItem) {

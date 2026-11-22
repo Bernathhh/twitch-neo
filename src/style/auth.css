@@ -141,3 +141,41 @@
   background-color: var(--live-red);
   color: #fff;
 }
+
+/* GitHub Credit on Auth */
+.auth-github-credit {
+  margin-top: 36px;
+  padding: 16px 28px;
+  background: rgba(145, 70, 255, 0.08);
+  border: 1px solid rgba(145, 70, 255, 0.25);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.github-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #efeff1;
+}
+
+.github-badge-row svg {
+  fill: #fff;
+}
+
+.github-badge-row strong {
+  color: #00E5FF;
+}
+
+.github-repo-link {
+  font-size: 15px;
+  color: var(--brand-purple-light);
+  text-decoration: none;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
