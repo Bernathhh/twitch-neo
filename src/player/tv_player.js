@@ -10,6 +10,24 @@ import { fetchLiveManifest } from '../api/reyohoho_proxy';
 import { createManifestBlobUrl, patchMediaCodecs, isHevcCodec } from './codecs';
 import { getStoredToken } from '../api/twitch_auth';
 
+export const STORAGE_KEY_QUALITY = 'twitch_neo_preferred_quality';
+
+export function getPreferredQuality() {
+  try {
+    return localStorage.getItem(STORAGE_KEY_QUALITY) || 'max'; // Default: 'max' (auto 1440p/Source)
+  } catch (e) {
+    return 'max';
+  }
+}
+
+export function setPreferredQuality(val) {
+  try {
+    localStorage.setItem(STORAGE_KEY_QUALITY, val);
+  } catch (e) {
+    console.error('Failed to set preferred quality:', e);
+  }
+}
+
 export class TvPlayer {
   constructor(options = {}) {
     this.options = options;
@@ -387,8 +405,10 @@ export class TvPlayer {
     }
     this.qualityOptionsEl.appendChild(autoBtn);
 
+    // Focus top element (highest resolution: 1440p) so remote users need 0 extra clicks to select maximum quality
+    const topOption = this.qualityOptionsEl.firstElementChild;
     if (this.options.onOpenDialog) {
-      this.options.onOpenDialog(activeOptionBtn || this.qualityOptionsEl.firstElementChild);
+      this.options.onOpenDialog(topOption || activeOptionBtn);
     }
   }
 
@@ -547,21 +567,56 @@ export class TvPlayer {
 
       this.hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
         console.log('[TvPlayer] Manifest parsed with levels:', data.levels.length);
-        if (startLevel >= 0) {
-          this.hls.currentLevel = startLevel;
-          this.hls.loadLevel = startLevel;
-        }
-        this.videoEl.play().catch(e => {
-          console.warn('[TvPlayer] Autoplay prevented, waiting for user action:', e);
-        });
 
-        if (startLevel >= 0 && data.levels[startLevel]) {
-          const lvl = data.levels[startLevel];
+        let targetLevel = startLevel;
+        if (targetLevel === -1) {
+          const pref = getPreferredQuality();
+          if (pref === 'max') {
+            // Find highest resolution level (1440p60 if available, else 1080p60)
+            let bestIdx = 0;
+            let bestHeight = 0;
+            let bestBitrate = 0;
+            for (let i = 0; i < data.levels.length; i++) {
+              const lvl = data.levels[i];
+              const h = lvl.height || 0;
+              const b = lvl.bitrate || 0;
+              if (h > bestHeight || (h === bestHeight && b > bestBitrate)) {
+                bestHeight = h;
+                bestBitrate = b;
+                bestIdx = i;
+              }
+            }
+            targetLevel = bestIdx;
+          } else if (pref === '1080p') {
+            let bestIdx = -1;
+            for (let i = 0; i < data.levels.length; i++) {
+              if (data.levels[i].height === 1080) { bestIdx = i; break; }
+            }
+            if (bestIdx !== -1) targetLevel = bestIdx;
+          } else if (pref === '720p') {
+            let bestIdx = -1;
+            for (let i = 0; i < data.levels.length; i++) {
+              if (data.levels[i].height === 720) { bestIdx = i; break; }
+            }
+            if (bestIdx !== -1) targetLevel = bestIdx;
+          }
+        }
+
+        if (targetLevel >= 0 && data.levels[targetLevel]) {
+          this.hls.currentLevel = targetLevel;
+          this.hls.loadLevel = targetLevel;
+          this.currentSelectedLevel = targetLevel;
+
+          const lvl = data.levels[targetLevel];
           const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Custom';
           const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
           this.qualityLabelEl.textContent = res;
           this.showQualityToast(`${res}${isHevc ? ' [HEVC]' : ''}`);
         }
+
+        this.videoEl.play().catch(e => {
+          console.warn('[TvPlayer] Autoplay prevented, waiting for user action:', e);
+        });
       });
 
       this.hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {

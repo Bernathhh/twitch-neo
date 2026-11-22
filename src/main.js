@@ -34,7 +34,7 @@ import {
 } from './api/reyohoho_proxy';
 
 import { SpatialNavigation } from './navigation/spatial_nav';
-import { TvPlayer } from './player/tv_player';
+import { TvPlayer, getPreferredQuality, setPreferredQuality } from './player/tv_player';
 
 class TwitchNativeApp {
   constructor() {
@@ -104,6 +104,7 @@ class TwitchNativeApp {
     // Settings containers
     this.proxySelectorContainer = document.getElementById('proxy-selector-container');
     this.proxyStatusIndicator = document.getElementById('proxy-status-indicator');
+    this.defaultQualityContainer = document.getElementById('default-quality-container');
 
     // Auth containers
     this.authCodeBox = document.getElementById('auth-code-box');
@@ -510,6 +511,7 @@ class TwitchNativeApp {
    * Settings View
    */
   _setupSettings() {
+    // 1. Proxy Server selector
     const currentProxy = getCurrentProxyServer();
     this.proxySelectorContainer.innerHTML = '';
 
@@ -524,6 +526,29 @@ class TwitchNativeApp {
       });
       this.proxySelectorContainer.appendChild(btn);
     });
+
+    // 2. Default Quality selector (Максимум 1440p / 1080p / 720p / Авто)
+    if (this.defaultQualityContainer) {
+      this.defaultQualityContainer.innerHTML = '';
+      const currentPref = getPreferredQuality();
+      const qualityOptions = [
+        { id: 'max', label: 'МАКСИМУМ (1440p / Source)' },
+        { id: '1080p', label: '1080p60' },
+        { id: '720p', label: '720p60' },
+        { id: 'auto', label: 'АВТО' }
+      ];
+
+      qualityOptions.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = `selector-btn nav-focusable ${opt.id === currentPref ? 'active' : ''}`;
+        btn.textContent = opt.label;
+        btn.addEventListener('click', () => {
+          setPreferredQuality(opt.id);
+          this._setupSettings();
+        });
+        this.defaultQualityContainer.appendChild(btn);
+      });
+    }
   }
 
   loadSettings() {
