@@ -327,6 +327,7 @@ export class TvPlayer {
 
   /**
    * Safe quality selection with pipeline reinitialization when crossing codec boundaries (AVC <-> HEVC)
+   * or changing resolutions on LG webOS Starfish GStreamer
    */
   _selectQualityLevel(idx, resLabel) {
     this.closeQualityDialog();
@@ -335,43 +336,26 @@ export class TvPlayer {
       return;
     }
 
-    const previousLevelIdx = this.currentSelectedLevel;
     this.currentSelectedLevel = idx;
     this.qualityLabelEl.textContent = resLabel;
 
-    // Check if pipeline needs a clean restart:
-    // webOS Starfish GStreamer crashes if HEVC data is fed into an active AVC SourceBuffer.
-    // Switching to/from 1440p60 (or any HEVC level) requires a fresh MediaSource.
-    let needsFullPipelineReset = false;
     if (idx === -1) {
-      // Auto: safe in-place switch
+      // Auto
       if (this.hls) {
         this.hls.currentLevel = -1;
+        this.hls.loadLevel = -1;
       }
       return;
     }
 
-    if (this.hls && this.hls.levels) {
-      const targetLevel = this.hls.levels[idx];
-      const isTargetHevc = targetLevel && (isHevcCodec(targetLevel.videoCodec) || targetLevel.height >= 1440);
-
-      let isCurrentHevc = false;
-      if (previousLevelIdx >= 0 && this.hls.levels[previousLevelIdx]) {
-        const curLevel = this.hls.levels[previousLevelIdx];
-        isCurrentHevc = isHevcCodec(curLevel.videoCodec) || curLevel.height >= 1440;
-      }
-
-      if (isTargetHevc !== isCurrentHevc || isTargetHevc) {
-        needsFullPipelineReset = true;
-      }
-    }
-
-    if (needsFullPipelineReset && this.currentBlobUrl) {
-      console.log(`[TvPlayer] Codec boundary switch detected. Performing clean hardware pipeline reset for level ${idx} (${resLabel})...`);
+    // Clean pipeline restart for specific quality levels prevents decoder deadlocks
+    if (this.currentBlobUrl) {
+      console.log(`[TvPlayer] Clean hardware pipeline restart for quality level ${idx} (${resLabel})...`);
       this.showSpinner();
       this._cleanPipelineRestart(this.currentBlobUrl, idx);
     } else if (this.hls) {
       this.hls.currentLevel = idx;
+      this.hls.loadLevel = idx;
     }
   }
 
@@ -386,8 +370,10 @@ export class TvPlayer {
     this.videoEl.removeAttribute('src');
     this.videoEl.load();
 
-    // Reinitialize Hls directly with target startLevel
-    this._initHls(blobUrl, startLevelIdx);
+    // Give webOS hardware decoder 150ms to release the hardware pipeline context
+    setTimeout(() => {
+      this._initHls(blobUrl, startLevelIdx);
+    }, 150);
   }
 
   /**
@@ -475,6 +461,10 @@ export class TvPlayer {
 
       this.hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
         console.log('[TvPlayer] Manifest parsed with levels:', data.levels.length);
+        if (startLevel >= 0) {
+          this.hls.currentLevel = startLevel;
+          this.hls.loadLevel = startLevel;
+        }
         this.videoEl.play().catch(e => {
           console.warn('[TvPlayer] Autoplay prevented, waiting for user action:', e);
         });

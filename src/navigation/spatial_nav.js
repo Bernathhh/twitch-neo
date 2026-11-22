@@ -186,7 +186,57 @@ export class SpatialNavigation {
   _handleKeyDown(e) {
     const keyCode = e.keyCode || e.which;
 
-    // Remote D-pad arrow keys (throttled to ~60ms to prevent event backlog)
+    // Check if video player is currently active
+    const playerContainer = document.getElementById('player-container');
+    const isPlayerOpen = playerContainer && !playerContainer.classList.contains('hidden');
+    const osd = document.getElementById('player-osd');
+    const isOsdVisible = osd && osd.classList.contains('visible');
+    const qualityDialog = document.getElementById('quality-dialog');
+    const isQualityOpen = qualityDialog && !qualityDialog.classList.contains('hidden');
+
+    // TV Media & Color Keys
+    // Red=403, Green=404, Yellow=405, Blue=406, Play=415, Pause=19, Stop=413, PlayPause
+    if (isPlayerOpen && window.app && window.app.player) {
+      if (keyCode === 404) { // Green button -> toggle Quality dialog
+        e.preventDefault();
+        window.app.player.toggleQualityDialog();
+        return;
+      }
+      if (keyCode === 405) { // Yellow button -> toggle Stats
+        e.preventDefault();
+        window.app.player.toggleStats();
+        return;
+      }
+      if (keyCode === 415 || keyCode === 19 || keyCode === 406) { // Play/Pause/Blue
+        e.preventDefault();
+        window.app.player.togglePlayPause();
+        return;
+      }
+      if (keyCode === 403) { // Red button -> reload
+        e.preventDefault();
+        window.app.player.reload();
+        return;
+      }
+    }
+
+    // If player is open but OSD is hidden (watching full-screen video),
+    // ANY arrow key or Enter must immediately wake up the OSD and focus controls!
+    if (isPlayerOpen && !isOsdVisible && !isQualityOpen) {
+      const isBack = keyCode === 461 || e.key === 'Escape' || keyCode === 27 || keyCode === 8;
+      if (!isBack) {
+        e.preventDefault();
+        if (window.app && window.app.player) {
+          window.app.player.showOsd();
+          const target = document.getElementById('btn-quality') || document.getElementById('btn-play-pause');
+          if (target) {
+            this.focusElement(target);
+          }
+        }
+        return;
+      }
+    }
+
+    // Remote D-pad arrow keys (throttled to ~50ms to prevent event backlog)
     const now = Date.now();
     const isArrow = e.key === 'ArrowUp' || keyCode === 38 ||
                     e.key === 'ArrowDown' || keyCode === 40 ||
@@ -195,7 +245,7 @@ export class SpatialNavigation {
 
     if (isArrow) {
       e.preventDefault();
-      if (now - this.lastMoveTime < 50) {
+      if (now - this.lastMoveTime < 45) {
         return; // debounce rapid key repetitions
       }
       this.lastMoveTime = now;
@@ -209,9 +259,14 @@ export class SpatialNavigation {
 
     // Enter / Click
     if (e.key === 'Enter' || keyCode === 13) {
-      if (this.currentFocused) {
+      if (this.currentFocused && document.body.contains(this.currentFocused)) {
         e.preventDefault();
         this.currentFocused.click();
+      } else if (isPlayerOpen && window.app && window.app.player) {
+        e.preventDefault();
+        window.app.player.showOsd();
+        const target = document.getElementById('btn-quality') || document.getElementById('btn-play-pause');
+        if (target) this.focusElement(target);
       }
       return;
     }

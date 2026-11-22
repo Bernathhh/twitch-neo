@@ -142,6 +142,14 @@ class TwitchNativeApp {
           this.player.closeQualityDialog();
           return true;
         }
+        if (this.player.isStatsVisible) {
+          this.player.toggleStats();
+          return true;
+        }
+        if (this.player.osdEl && this.player.osdEl.classList.contains('visible')) {
+          this.player.hideOsd();
+          return true;
+        }
         this.player.close();
         return true;
       }

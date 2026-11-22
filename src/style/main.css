@@ -50,20 +50,16 @@ html, body {
   overflow: hidden;
 }
 
-/* Spatial Focus Style for TV Remote - GPU accelerated */
+/* Spatial Focus Style for TV Remote - Zero-lag, zero layout thrashing */
 .nav-focusable {
   outline: none;
   cursor: pointer;
-  transform: translateZ(0);
-  will-change: transform;
-  transition: transform 0.12s ease-out;
 }
 
 .nav-focusable.nav-focused,
 .nav-focusable:focus {
   outline: 4px solid var(--focus-outline) !important;
   outline-offset: 4px !important;
-  transform: scale(1.04) translateZ(0);
   z-index: 50;
 }
 
