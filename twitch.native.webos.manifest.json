@@ -1,5 +1,5 @@
 {
-  "id": "org.webosbrew.twitch.native",
+  "id": "twitch.adamffdev.v1",
   "version": "1.0.0",
   "type": "web",
   "title": "Twitch Native",
@@ -7,8 +7,8 @@
   "iconUri": "icon.png",
   "sourceUrl": "https://github.com/Bernathhh/twitch-webos-native",
   "rootRequired": false,
-  "ipkUrl": "org.webosbrew.twitch.native_1.0.0_all.ipk",
+  "ipkUrl": "twitch.adamffdev.v1_1.0.0_all.ipk",
   "ipkHash": {
-    "sha256": "ed4482f251be83624bef764a6bea837efa53eed9a1da6440c57ade8a47f04e5f"
+    "sha256": "8e434b568bf2c840fa46f484a23e312b6b60021bf1fc1ac8a5f9aeab8919b409"
   }
 }

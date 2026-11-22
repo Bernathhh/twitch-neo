@@ -1,5 +1,5 @@
 {
-  "id": "org.webosbrew.twitch.native",
+  "id": "twitch.adamffdev.v1",
   "version": "1.0.0",
   "vendor": "Bernath",
   "type": "web",
@@ -9,6 +9,7 @@
   "largeIcon": "largeIcon.png",
   "splashBackground": "splash.png",
   "iconColor": "#9146FF",
+  "removable": true,
   "vendorExtension": {
     "allowCrossDomain": true
   },
