@@ -107,4 +107,4 @@ npm run release
 
 Проект распространяется под свободной лицензией **GNU General Public License v3.0**. Подробнее см. в файле [LICENSE](LICENSE).
 
-Автор: **Bernath** ([@Bernathhh](https://github.com/Bernathhh))
+Автор: **Pavel Bernat** ([@Bernathhh](https://github.com/Bernathhh))
