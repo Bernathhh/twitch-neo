@@ -6,8 +6,8 @@
 import { getStoredToken } from './twitch_auth';
 
 export const PROXY_PROVIDERS = [
-  { id: 'luminous_eu', name: 'Luminous EU (Ad-Free PRO)', type: 'direct', url: 'https://eu.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true' },
-  { id: 'luminous_eu2', name: 'Luminous EU 2', type: 'direct', url: 'https://eu2.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true' },
+  { id: 'luminous_eu', name: 'Luminous EU (Ad-Free PRO)', type: 'direct', url: 'https://eu.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true&low_latency=true' },
+  { id: 'luminous_eu2', name: 'Luminous EU 2', type: 'direct', url: 'https://eu2.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true&low_latency=true' },
   { id: 'proxy4', name: 'ReYohoho Server 4 (Россия)', type: 'usher', url: 'https://proxy4.rte.net.ru/' },
   { id: 'proxy7', name: 'ReYohoho Server 7', type: 'usher', url: 'https://proxy7.rte.net.ru/' },
   { id: 'proxy5', name: 'ReYohoho Server 5', type: 'usher', url: 'https://proxy5.rte.net.ru/' },
@@ -98,6 +98,7 @@ export async function fetchLiveManifest(channelLogin, sig, token) {
           token,
           allow_source: 'true',
           fast_bread: 'true',
+          low_latency: 'true',
           supported_codecs: 'h265,h264'
         });
         if (userAuthToken) {

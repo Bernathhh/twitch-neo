@@ -46,6 +46,7 @@ export class TvPlayer {
     this.statBitrate = document.getElementById('stat-bitrate');
     this.statCodec = document.getElementById('stat-codec');
     this.statBuffer = document.getElementById('stat-buffer');
+    this.statLatency = document.getElementById('stat-latency');
     this.statDropped = document.getElementById('stat-dropped');
     this.statProxy = document.getElementById('stat-proxy');
 
@@ -197,6 +198,14 @@ export class TvPlayer {
       // ignore
     }
     this.statBuffer.textContent = bufferSec.toFixed(1);
+
+    if (this.statLatency) {
+      if (this.hls && typeof this.hls.latency === 'number' && !isNaN(this.hls.latency)) {
+        this.statLatency.textContent = this.hls.latency.toFixed(1);
+      } else {
+        this.statLatency.textContent = '-';
+      }
+    }
 
     // Dropped frames
     if (this.videoEl.getVideoPlaybackQuality) {
@@ -457,23 +466,29 @@ export class TvPlayer {
         // 1. enableWorker: false eliminates worker thread IPC overhead on ARM dual/quad-core TV CPUs
         enableWorker: false,
 
-        // 2. Memory-safe buffer limits (prevents TV RAM exhaustion and dropped frames on 1440p)
-        maxBufferLength: 6,
-        maxMaxBufferLength: 10,
-        maxBufferSize: 12 * 1024 * 1024, // 12 MB buffer cap
-        backBufferLength: 3,             // Aggressively flush passed frames for GPU memory
-        liveBackBufferLength: 3,
-        frontBufferFlushThreshold: 12,
-        lowLatencyMode: false,
+        // 2. Ultra Low-Latency tuning for Twitch Live streams
+        lowLatencyMode: true,
+        liveSyncDurationCount: 1,
+        liveMaxLatencyDurationCount: 3,
+        maxLiveSyncPlaybackRate: 1.08,
+        liveDurationInfinity: true,
 
-        // 3. Disable Hls.js internal nudging (which triggers synchronous IPC SeekTo deadlocks on webOS)
+        // 3. Memory-safe buffer limits (prevents TV RAM exhaustion and dropped frames on 1440p)
+        maxBufferLength: 4,
+        maxMaxBufferLength: 6,
+        maxBufferSize: 10 * 1024 * 1024, // 10 MB buffer cap
+        backBufferLength: 2,             // Aggressively flush passed frames for GPU memory
+        liveBackBufferLength: 2,
+        frontBufferFlushThreshold: 8,
+
+        // 4. Disable Hls.js internal nudging (which triggers synchronous IPC SeekTo deadlocks on webOS)
         highBufferWatchdogPeriod: 0,
         nudgeMaxRetry: 0,
 
         // Network timeouts
-        fragLoadingTimeOut: 20000,
-        manifestLoadingTimeOut: 15000,
-        levelLoadingTimeOut: 15000,
+        fragLoadingTimeOut: 12000,
+        manifestLoadingTimeOut: 10000,
+        levelLoadingTimeOut: 10000,
 
         startLevel: startLevel
       });
