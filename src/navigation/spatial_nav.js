@@ -89,9 +89,9 @@ export class SpatialNavigation {
       focusables.push(...activeView.querySelectorAll('.nav-focusable:not([disabled])'));
     }
 
-    // Filter elements with non-zero dimensions
+    // Filter visible elements without forced layout thrashing
     return focusables.filter(el => {
-      return el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0;
+      return el.offsetParent !== null;
     });
   }
 
@@ -108,30 +108,99 @@ export class SpatialNavigation {
     el.focus();
 
     if (scroll) {
-      try {
-        // 'auto' scrolling is hardware accelerated on webOS, 'smooth' lags severely
-        el.scrollIntoView({
-          behavior: 'auto',
-          block: 'nearest',
-          inline: 'nearest'
-        });
-      } catch (e) {
-        // ignore scroll error
+      const scrollContainer = el.closest('.main-content');
+      if (scrollContainer) {
+        const cRect = scrollContainer.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+
+        // Comfortable TV viewing margins
+        const topPadding = 90;
+        const bottomPadding = 110;
+
+        if (eRect.bottom > cRect.bottom - bottomPadding) {
+          const delta = eRect.bottom - (cRect.bottom - bottomPadding);
+          scrollContainer.scrollTop += delta;
+        } else if (eRect.top < cRect.top + topPadding) {
+          const delta = (cRect.top + topPadding) - eRect.top;
+          scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop - delta);
+        }
+      } else {
+        try {
+          // 'auto' scrolling is hardware accelerated on webOS, 'smooth' lags severely
+          el.scrollIntoView({
+            behavior: 'auto',
+            block: 'nearest',
+            inline: 'nearest'
+          });
+        } catch (e) {
+          // ignore scroll error
+        }
       }
     }
   }
 
   /**
-   * Find nearest focusable in given direction using 2D geometric vector weighting
+   * Find nearest focusable in given direction using fast grid indexing + 2D geometric fallback
    */
   move(direction) {
-    const focusables = this.getFocusableElements();
-    if (focusables.length === 0) return;
-
     if (!this.currentFocused || !document.body.contains(this.currentFocused)) {
-      this.focusElement(focusables[0]);
+      const focusables = this.getFocusableElements();
+      if (focusables.length > 0) this.focusElement(focusables[0]);
       return;
     }
+
+    // Fast-path: 2D Grid navigation (zero DOM reflows, instant O(1))
+    const currentGrid = this.currentFocused.closest('.cards-grid');
+    if (currentGrid) {
+      const cards = Array.from(currentGrid.querySelectorAll('.nav-focusable:not([disabled])'));
+      const index = cards.indexOf(this.currentFocused);
+
+      if (index !== -1) {
+        // .stream-grid = 3 columns, .game-grid = 5 columns
+        const cols = currentGrid.classList.contains('game-grid') ? 5 : 3;
+
+        if (direction === 'down') {
+          const nextIndex = index + cols;
+          if (nextIndex < cards.length) {
+            this.focusElement(cards[nextIndex]);
+            return;
+          }
+          if (index < cards.length - 1 && Math.floor(index / cols) < Math.floor((cards.length - 1) / cols)) {
+            this.focusElement(cards[cards.length - 1]);
+            return;
+          }
+          return;
+        }
+
+        if (direction === 'up') {
+          const prevIndex = index - cols;
+          if (prevIndex >= 0) {
+            this.focusElement(cards[prevIndex]);
+            return;
+          }
+          // Top row: fall through to geometric search to reach controls above grid
+        }
+
+        if (direction === 'right') {
+          if ((index + 1) % cols !== 0 && index + 1 < cards.length) {
+            this.focusElement(cards[index + 1]);
+            return;
+          }
+          return;
+        }
+
+        if (direction === 'left') {
+          if (index % cols !== 0) {
+            this.focusElement(cards[index - 1]);
+            return;
+          }
+          // Leftmost column: fall through to geometric search to cleanly jump to sidebar
+        }
+      }
+    }
+
+    const focusables = this.getFocusableElements();
+    if (focusables.length === 0) return;
 
     const currentRect = this.currentFocused.getBoundingClientRect();
     const cx = currentRect.left + currentRect.width / 2;
@@ -260,8 +329,8 @@ export class SpatialNavigation {
 
     if (isArrow) {
       e.preventDefault();
-      if (now - this.lastMoveTime < 45) {
-        return; // debounce rapid key repetitions
+      if (now - this.lastMoveTime < 65) {
+        return; // debounce rapid key repetitions for smooth TV frame pacing
       }
       this.lastMoveTime = now;
 

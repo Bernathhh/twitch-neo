@@ -11,10 +11,10 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/version-v1.0.8-blueviolet.svg" alt="Version 1.0.8">
+  <img src="https://img.shields.io/badge/version-v1.0.9-blueviolet.svg" alt="Version 1.0.9">
   <img src="https://img.shields.io/badge/webOS-4.0%2B-purple.svg" alt="webOS 4.0+">
   <img src="https://img.shields.io/badge/Resolution-1440p60%20%2F%201080p60-success.svg" alt="1440p60">
-  <img src="https://img.shields.io/badge/Package-388%20KB-brightgreen.svg" alt="Package Size">
+  <img src="https://img.shields.io/badge/Package-389%20KB-brightgreen.svg" alt="Package Size">
   <a href="https://github.com/Bernathhh"><img src="https://img.shields.io/badge/Author-Pavel%20Bernat%20(%40Bernathhh)-orange.svg" alt="Author"></a>
 </p>
 
@@ -40,6 +40,11 @@
   - Сохранение чистого буфера стрима без зависаний и черного экрана.
 - ⚡ **Ультранизкая задержка (Ultra-Low Latency):**
   Оптимизированный буфер (1–3 чанка) сокращает задержку от реального стримера до минимума (~2–3 секунды) без буферизации.
+- 🏎 **Плавный 60 FPS скроллинг списков и сеток (Zero-Jank Grid Navigation):**
+  - Прямая O(1) пространственная навигация по сеткам без принудительного пересчёта макета (DOM reflows).
+  - Аппаратная изоляция карточек через `contain: layout style paint;`, `content-visibility: auto` и GPU-слои `transform: translateZ(0)`.
+  - Отложенная загрузка и фоновое декодирование обложек (`decoding="async" loading="lazy"`).
+  - Прямое позиционирование скролла с комфортными ТВ-отступами вместо дергающегося `scrollIntoView`.
 - 🔝 **Автозапуск сразу в максимальном качестве (1440p / Source):**
   При открытии стрима плеер не тратит время на автоподстройку снизу вверх, а сразу запускает стрим в наивысшем разрешении стримера (**1440p60 HEVC** при наличии или 1080p60).
 - 🏷 **Всплывающий бейдж качества (Quality Toast Pill):**
@@ -78,6 +83,15 @@
 
 ## 📋 История версий (Changelog)
 
+### [v1.0.9] - 22.11.2026
+- **Устранение лагов при листании «Отслеживаемое» и больших списков:**
+  - Внедрён быстрый алгоритм навигации по 2D-сеткам с O(1) переходом без пересчёта геометрии и DOM reflows.
+  - Прямое позиционирование скролла `main-content.scrollTop` с безопасными отступами сверху и снизу (80–110px) взамен прерывистого `scrollIntoView`.
+  - Аппаратная изоляция карточек через `contain: layout style paint;`, `content-visibility: auto; contain-intrinsic-size: 0 340px;` и аппаратный композитинг `transform: translateZ(0);`.
+  - Добавлены `decoding="async"` и `loading="lazy"` для всех превью-изображений и аватаров.
+  - Сборка элементов сетки через единый `DocumentFragment`.
+  - Калибровка частоты повтора клавиш пульта под 60 FPS экранную развёртку webOS.
+
 ### [v1.0.8] - 22.11.2026
 - **Устранение «Commercial break in progress» на 1440p:**
   - Интегрирован алгоритм перехвата чанклистов TwitchAdSolutions (VAFT): вырезание SSAI вставок, блокировка LL-HLS prefetch рекламы и удержание чистого живого буфера стрима.
@@ -111,7 +125,7 @@
 ## 📦 Установка
 
 ### Способ 1: Через webOS Dev Manager (Рекомендуемый)
-1. Скачайте свежий файл `tv.twitch.neo_1.0.8_all.ipk` из [Релизов](https://github.com/Bernathhh/twitch-neo/releases).
+1. Скачайте свежий файл `tv.twitch.neo_1.0.9_all.ipk` из [Релизов](https://github.com/Bernathhh/twitch-neo/releases).
 2. Откройте **webOS Dev Manager** на вашем компьютере.
 3. Нажмите кнопку **«Install»** вверху экрана и выберите скачанный `.ipk` файл (или просто перетащите файл в окно программы).
 
@@ -121,7 +135,7 @@
 
 ### Способ 3: Через терминал / CLI
 ```bash
-ares-install -d <имя_устройства> tv.twitch.neo_1.0.8_all.ipk
+ares-install -d <имя_устройства> tv.twitch.neo_1.0.9_all.ipk
 ```
 
 ---

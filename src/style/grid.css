@@ -119,6 +119,7 @@
   display: grid;
   gap: 28px;
   width: 100%;
+  contain: layout style;
 }
 
 /* 3 Columns for Streams: Large, clear, TV-friendly */
@@ -140,6 +141,10 @@
   overflow: hidden;
   border: none;
   text-align: left;
+  contain: layout style paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 340px;
+  transform: translateZ(0);
 }
 
 .card-thumb-container {
@@ -151,6 +156,7 @@
   overflow: hidden;
   margin-bottom: 14px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  contain: strict;
 }
 
 .card-thumb {
@@ -236,6 +242,10 @@
   background: transparent;
   border: none;
   text-align: left;
+  contain: layout style paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 280px;
+  transform: translateZ(0);
 }
 
 .game-thumb-container {
@@ -246,6 +256,7 @@
   background-color: var(--bg-secondary);
   margin-bottom: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  contain: strict;
 }
 
 .game-thumb {

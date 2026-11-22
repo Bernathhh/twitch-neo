@@ -360,17 +360,19 @@ class TwitchNativeApp {
 
   _renderStreamGrid(streams, container) {
     container.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+
     streams.forEach(stream => {
       const card = document.createElement('button');
       card.className = 'stream-card nav-focusable';
       card.innerHTML = `
         <div class="card-thumb-container">
-          <img class="card-thumb" src="${stream.previewUrl}" alt="">
+          <img class="card-thumb" src="${stream.previewUrl}" alt="" loading="lazy" decoding="async">
           <span class="live-pill badge-top-left">LIVE</span>
           <span class="badge-bottom-left">${stream.viewers.toLocaleString('ru-RU')} зрит.</span>
         </div>
         <div class="card-meta">
-          <img class="card-avatar" src="${stream.userAvatar}" alt="">
+          <img class="card-avatar" src="${stream.userAvatar}" alt="" loading="lazy" decoding="async">
           <div class="card-details">
             <h3 class="card-title">${stream.title}</h3>
             <span class="card-author">${stream.userName}</span>
@@ -384,8 +386,10 @@ class TwitchNativeApp {
         this.player.playStream(stream);
       });
 
-      container.appendChild(card);
+      fragment.appendChild(card);
     });
+
+    container.appendChild(fragment);
   }
 
   /**
@@ -424,12 +428,14 @@ class TwitchNativeApp {
     try {
       const games = await fetchTopGames(30);
       this.browseGrid.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+
       games.forEach(game => {
         const card = document.createElement('button');
         card.className = 'game-card nav-focusable';
         card.innerHTML = `
           <div class="game-thumb-container">
-            <img class="game-thumb" src="${game.boxArtUrl}" alt="${game.name}">
+            <img class="game-thumb" src="${game.boxArtUrl}" alt="${game.name}" loading="lazy" decoding="async">
           </div>
           <div class="game-name">${game.displayName || game.name}</div>
           <div class="game-viewers">${game.viewers ? game.viewers.toLocaleString('ru-RU') + ' зрителей' : ''}</div>
@@ -439,8 +445,10 @@ class TwitchNativeApp {
           this.openCategory(game);
         });
 
-        this.browseGrid.appendChild(card);
+        fragment.appendChild(card);
       });
+
+      this.browseGrid.appendChild(fragment);
     } catch (err) {
       console.error('[App] Failed to load games:', err);
       this.browseGrid.innerHTML = `<div class="empty-desc">Ошибка: ${err.message}</div>`;

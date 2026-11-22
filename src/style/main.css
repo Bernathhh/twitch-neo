@@ -76,6 +76,9 @@ html, body {
   overflow-x: hidden;
   padding: 44px 64px 64px 64px;
   scroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
+  transform: translateZ(0);
 }
 
 /* View Sections */
