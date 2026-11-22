@@ -60,45 +60,45 @@
 }
 
 .osd-avatar {
-  width: 60px;
-  height: 60px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
-  border: 2px solid var(--brand-purple);
+  border: 3px solid var(--brand-purple);
   background-color: var(--bg-elevated);
 }
 
 .osd-titles {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .osd-channel-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 
 .osd-channel-name {
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 800;
   color: #fff;
 }
 
 .osd-game-name {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--brand-purple-light);
 }
 
 .osd-stream-title {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 900px;
+  max-width: 1000px;
 }
 
 .osd-top-right {
@@ -107,21 +107,21 @@
 }
 
 .osd-viewers {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   color: #fff;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 8px 18px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.75);
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 /* OSD Bottom Bar */
 .osd-bottom-bar {
   display: flex;
   align-items: center;
-  padding: 44px 64px;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.45) 60%, transparent 100%);
+  padding: 48px 64px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 65%, transparent 100%);
 }
 
 .osd-controls {
@@ -131,75 +131,126 @@
 }
 
 .osd-btn {
-  width: 64px;
-  height: 64px;
+  height: 60px;
+  min-width: 60px;
+  padding: 0 24px;
   border-radius: 16px;
   background-color: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.osd-btn .btn-text {
+  font-size: 19px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.osd-btn:hover,
+.osd-btn.nav-focused {
+  background-color: var(--brand-purple) !important;
+  border-color: #fff !important;
+  outline: 4px solid var(--focus-outline) !important;
+  outline-offset: 2px !important;
+}
+
+.quality-badge-btn {
+  min-width: 120px;
+}
+
+/* Quality Modal - Centered TV Sheet */
+.quality-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.osd-btn:hover,
-.osd-btn.nav-focused {
-  background-color: var(--brand-purple);
-  border-color: var(--brand-purple-light);
-}
-
-.quality-badge-btn {
-  width: auto;
-  min-width: 80px;
-  padding: 0 20px;
-  font-size: 17px;
-  font-weight: 800;
-}
-
-/* Quality Dialog */
-.quality-dialog {
+.quality-backdrop {
   position: absolute;
-  bottom: 125px;
-  left: 64px;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 16px;
-  padding: 24px;
-  min-width: 320px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
-  z-index: 20;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.78);
+}
+
+.quality-dialog {
+  position: relative;
+  background-color: #141418;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 32px 36px;
+  min-width: 480px;
+  max-width: 560px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.95);
+  z-index: 101;
+}
+
+.dialog-header {
+  margin-bottom: 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 16px;
 }
 
 .dialog-title {
-  font-size: 18px;
+  font-size: 26px;
   font-weight: 800;
-  color: var(--brand-purple-light);
-  margin-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 10px;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.dialog-hint {
+  font-size: 16px;
+  color: var(--text-secondary);
 }
 
 .dialog-options {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .dialog-option {
-  background-color: var(--bg-elevated);
-  border: 1px solid transparent;
-  color: var(--text-primary);
-  padding: 12px 18px;
-  border-radius: 10px;
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #1f1f26;
+  border: 2px solid transparent;
+  color: #efeff1;
+  padding: 16px 24px;
+  border-radius: 14px;
+  font-size: 20px;
   font-weight: 700;
   text-align: left;
+  cursor: pointer;
 }
 
 .dialog-option.active {
-  background-color: rgba(145, 70, 255, 0.22);
+  background-color: rgba(145, 70, 255, 0.28);
   border-color: var(--brand-purple);
-  color: var(--brand-purple-light);
+  color: #fff;
+}
+
+.dialog-option.nav-focused {
+  background-color: var(--brand-purple) !important;
+  border-color: #fff !important;
+  color: #fff !important;
+  outline: 4px solid var(--focus-outline) !important;
+  outline-offset: 2px !important;
 }
 
 /* Stats for Nerds Overlay */

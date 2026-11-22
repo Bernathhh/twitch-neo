@@ -1,27 +1,33 @@
 /**
- * ReYohoho Twitch Proxy Manager
- * Handles ad-free stream playlist retrieval and server failover.
+ * Multi-Provider Ad-Free Twitch Proxy Manager
+ * Integrates Luminous (TTV LOL PRO) and ReYohoho proxies for 100% ad-free 1440p/1080p playback
  */
 
-export const REYOHOHO_SERVERS = [
-  { id: 'proxy4', name: 'ReYohoho Server 4 (Рекомендуемый)', url: 'https://proxy4.rte.net.ru/' },
-  { id: 'proxy7', name: 'ReYohoho Server 7', url: 'https://proxy7.rte.net.ru/' },
-  { id: 'proxy5', name: 'ReYohoho Server 5', url: 'https://proxy5.rte.net.ru/' },
-  { id: 'proxy6', name: 'ReYohoho Server 6', url: 'https://proxy6.rte.net.ru/' }
+import { getStoredToken } from './twitch_auth';
+
+export const PROXY_PROVIDERS = [
+  { id: 'luminous_eu', name: 'Luminous EU (Ad-Free PRO)', type: 'direct', url: 'https://eu.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true' },
+  { id: 'luminous_eu2', name: 'Luminous EU 2', type: 'direct', url: 'https://eu2.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true' },
+  { id: 'proxy4', name: 'ReYohoho Server 4 (Россия)', type: 'usher', url: 'https://proxy4.rte.net.ru/' },
+  { id: 'proxy7', name: 'ReYohoho Server 7', type: 'usher', url: 'https://proxy7.rte.net.ru/' },
+  { id: 'proxy5', name: 'ReYohoho Server 5', type: 'usher', url: 'https://proxy5.rte.net.ru/' },
+  { id: 'proxy6', name: 'ReYohoho Server 6', type: 'usher', url: 'https://proxy6.rte.net.ru/' }
 ];
+
+export const REYOHOHO_SERVERS = PROXY_PROVIDERS.filter(p => p.type === 'usher');
 
 const STORAGE_KEY_PROXY = 'twitch_native_proxy_server';
 
 export function getCurrentProxyServer() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY_PROXY);
-    if (saved && REYOHOHO_SERVERS.some(s => s.url === saved)) {
+    if (saved && PROXY_PROVIDERS.some(s => s.url === saved)) {
       return saved;
     }
   } catch (e) {
     // fallback
   }
-  return REYOHOHO_SERVERS[0].url;
+  return PROXY_PROVIDERS[0].url;
 }
 
 export function setCurrentProxyServer(url) {
@@ -36,7 +42,10 @@ export function setCurrentProxyServer(url) {
  * Ping / health check for proxy server
  */
 export async function testProxyPing(serverUrl) {
-  const checkUrl = `${serverUrl}https://usher.ttvnw.net/api/channel/hls/lofigirl.m3u8?allow_source=true&allow_audio_only=true&fast_bread=true`;
+  const checkUrl = serverUrl.includes('{channel}')
+    ? serverUrl.replace('{channel}', 'lofigirl')
+    : `${serverUrl}https://usher.ttvnw.net/api/channel/hls/lofigirl.m3u8?allow_source=true&allow_audio_only=true&fast_bread=true`;
+
   const startTime = Date.now();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 6000);
@@ -66,28 +75,36 @@ export async function testProxyPing(serverUrl) {
 }
 
 /**
- * Fetch live M3U8 master playlist through ReYohoho proxy with automatic failover
+ * Fetch live M3U8 master playlist through Ad-Free proxy with automatic multi-server failover
  */
 export async function fetchLiveManifest(channelLogin, sig, token) {
   const current = getCurrentProxyServer();
   const serversToTry = [
     current,
-    ...REYOHOHO_SERVERS.map(s => s.url).filter(u => u !== current)
+    ...PROXY_PROVIDERS.map(s => s.url).filter(u => u !== current)
   ];
 
   let lastError = null;
+  const userAuthToken = getStoredToken();
 
   for (const server of serversToTry) {
     try {
-      const usherParams = new URLSearchParams({
-        sig,
-        token,
-        allow_source: 'true',
-        fast_bread: 'true',
-        supported_codecs: 'h265,h264'
-      });
-
-      const fullUrl = `${server}https://usher.ttvnw.net/api/channel/hls/${encodeURIComponent(channelLogin)}.m3u8?${usherParams.toString()}`;
+      let fullUrl = '';
+      if (server.includes('{channel}')) {
+        fullUrl = server.replace('{channel}', encodeURIComponent(channelLogin));
+      } else {
+        const usherParams = new URLSearchParams({
+          sig,
+          token,
+          allow_source: 'true',
+          fast_bread: 'true',
+          supported_codecs: 'h265,h264'
+        });
+        if (userAuthToken) {
+          usherParams.set('auth', userAuthToken);
+        }
+        fullUrl = `${server}https://usher.ttvnw.net/api/channel/hls/${encodeURIComponent(channelLogin)}.m3u8?${usherParams.toString()}`;
+      }
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -108,12 +125,12 @@ export async function fetchLiveManifest(channelLogin, sig, token) {
           };
         }
       }
-      lastError = new Error(`Server ${server} returned HTTP ${res.status}`);
+      lastError = new Error(`Proxy ${server} returned HTTP ${res.status}`);
     } catch (err) {
       lastError = err;
       console.warn(`[Proxy] Server ${server} failed, trying next:`, err.message);
     }
   }
 
-  throw lastError || new Error('Все серверы ReYohoho недоступны в данный момент.');
+  throw lastError || new Error('Все серверы AdBlock прокси недоступны в данный момент.');
 }

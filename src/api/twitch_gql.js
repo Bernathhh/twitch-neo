@@ -226,6 +226,7 @@ export async function searchChannels(userQuery) {
 
 /**
  * Fetch playback access token for stream playback
+ * Uses ad-free player types (thunderdome / frontpage) to bypass mid-roll ads and commercial breaks
  */
 export async function fetchPlaybackAccessToken(channelLogin, token = null) {
   const query = `
@@ -238,21 +239,25 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
     }
   `;
 
-  const variables = {
-    login: channelLogin,
-    playerType: 'site'
-  };
+  // thunderdome & frontpage do not receive Twitch mid-roll commercial breaks
+  const playerTypes = ['thunderdome', 'frontpage', 'embed', 'site'];
 
-  const data = await postGql(query, variables, token);
-  const tokenData = data?.streamPlaybackAccessToken;
-  if (!tokenData || !tokenData.signature || !tokenData.value) {
-    throw new Error('Не удалось получить токен воспроизведения Twitch');
+  for (const pt of playerTypes) {
+    try {
+      const data = await postGql(query, { login: channelLogin, playerType: pt }, token);
+      const tokenData = data?.streamPlaybackAccessToken;
+      if (tokenData && tokenData.signature && tokenData.value) {
+        return {
+          sig: tokenData.signature,
+          token: tokenData.value
+        };
+      }
+    } catch (e) {
+      // try next playerType
+    }
   }
 
-  return {
-    sig: tokenData.signature,
-    token: tokenData.value
-  };
+  throw new Error('Не удалось получить токен воспроизведения Twitch');
 }
 
 /**

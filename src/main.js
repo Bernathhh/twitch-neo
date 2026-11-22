@@ -51,9 +51,13 @@ class TwitchNativeApp {
           this.focusFirstInActiveView();
         }
       },
-      onOpenDialog: (container) => {
-        const firstBtn = container.querySelector('.nav-focusable');
-        if (firstBtn) this.nav.focusElement(firstBtn);
+      onOpenDialog: (targetEl) => {
+        if (targetEl && targetEl.classList?.contains('nav-focusable')) {
+          this.nav.focusElement(targetEl);
+        } else {
+          const firstBtn = document.querySelector('#quality-options-list .dialog-option');
+          if (firstBtn) this.nav.focusElement(firstBtn);
+        }
       }
     });
 

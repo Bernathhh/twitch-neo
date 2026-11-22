@@ -18,6 +18,7 @@ export class TvPlayer {
     this.containerEl = document.getElementById('player-container');
     this.osdEl = document.getElementById('player-osd');
     this.spinnerEl = document.getElementById('player-spinner');
+    this.qualityModalEl = document.getElementById('quality-modal');
     this.qualityDialogEl = document.getElementById('quality-dialog');
     this.qualityOptionsEl = document.getElementById('quality-options-list');
     this.statsOverlayEl = document.getElementById('stats-overlay');
@@ -281,21 +282,21 @@ export class TvPlayer {
   openQualityDialog() {
     if (!this.hls || !this.hls.levels || this.hls.levels.length === 0) return;
     this.isQualityDialogVisible = true;
+    clearTimeout(this.osdTimeout);
+
+    if (this.qualityModalEl) {
+      this.qualityModalEl.classList.remove('hidden');
+    }
     this.qualityDialogEl.classList.remove('hidden');
     this.qualityOptionsEl.innerHTML = '';
 
-    // Auto option
-    const autoBtn = document.createElement('button');
-    const isAutoActive = this.currentSelectedLevel === -1;
-    autoBtn.className = `dialog-option nav-focusable ${isAutoActive ? 'active' : ''}`;
-    autoBtn.textContent = 'Авто (Рекомендуется)';
-    autoBtn.addEventListener('click', () => {
-      this._selectQualityLevel(-1, 'Auto');
-    });
-    this.qualityOptionsEl.appendChild(autoBtn);
+    let activeOptionBtn = null;
 
-    // Specific levels
-    this.hls.levels.forEach((lvl, idx) => {
+    // Specific levels: Highest resolution first for Smart TV users
+    const sortedIndices = [...Array(this.hls.levels.length).keys()].reverse();
+
+    sortedIndices.forEach((idx) => {
+      const lvl = this.hls.levels[idx];
       const optBtn = document.createElement('button');
       const isSelected = this.currentSelectedLevel === idx;
       optBtn.className = `dialog-option nav-focusable ${isSelected ? 'active' : ''}`;
@@ -304,24 +305,45 @@ export class TvPlayer {
       const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
       const tagLabel = isHevc ? ' [HEVC]' : '';
       const bitrateLabel = lvl.bitrate ? ` • ${(lvl.bitrate / 1000000).toFixed(1)} Mbps` : '';
-      optBtn.textContent = `${resLabel}${tagLabel}${bitrateLabel}`;
+      optBtn.innerHTML = `<span>${resLabel}${tagLabel}${bitrateLabel}</span>${isSelected ? '<span class="opt-check">✓</span>' : ''}`;
 
       optBtn.addEventListener('click', () => {
         this._selectQualityLevel(idx, resLabel);
       });
 
+      if (isSelected) {
+        activeOptionBtn = optBtn;
+      }
       this.qualityOptionsEl.appendChild(optBtn);
     });
 
+    // Auto option at the bottom
+    const autoBtn = document.createElement('button');
+    const isAutoActive = this.currentSelectedLevel === -1;
+    autoBtn.className = `dialog-option nav-focusable ${isAutoActive ? 'active' : ''}`;
+    autoBtn.innerHTML = `<span>Авто (Рекомендуется)</span>${isAutoActive ? '<span class="opt-check">✓</span>' : ''}`;
+    autoBtn.addEventListener('click', () => {
+      this._selectQualityLevel(-1, 'Auto');
+    });
+    if (isAutoActive) {
+      activeOptionBtn = autoBtn;
+    }
+    this.qualityOptionsEl.appendChild(autoBtn);
+
     if (this.options.onOpenDialog) {
-      this.options.onOpenDialog(this.qualityOptionsEl);
+      this.options.onOpenDialog(activeOptionBtn || this.qualityOptionsEl.firstElementChild);
     }
   }
 
   closeQualityDialog() {
     this.isQualityDialogVisible = false;
+    if (this.qualityModalEl) {
+      this.qualityModalEl.classList.add('hidden');
+    }
     this.qualityDialogEl.classList.add('hidden');
-    this.btnQuality.focus();
+    if (this.btnQuality) {
+      this.btnQuality.focus();
+    }
     this.showOsd();
   }
 

@@ -11,11 +11,25 @@ export class SpatialNavigation {
     this.lastMoveTime = 0;
 
     this._handleKeyDown = this._handleKeyDown.bind(this);
+    this._handleKeyUp = this._handleKeyUp.bind(this);
+  }
+
+  _handleKeyUp(e) {
+    const keyCode = e.keyCode || e.which;
+    if (keyCode === 461 || e.key === 'Escape' || keyCode === 27 || keyCode === 8) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
   }
 
   init() {
     if (!this.isListening) {
       window.addEventListener('keydown', this._handleKeyDown, true);
+      window.addEventListener('keyup', this._handleKeyUp, true);
+      window.addEventListener('popstate', (e) => {
+        e.preventDefault();
+      }, true);
       this.isListening = true;
     }
   }
@@ -23,6 +37,7 @@ export class SpatialNavigation {
   destroy() {
     if (this.isListening) {
       window.removeEventListener('keydown', this._handleKeyDown, true);
+      window.removeEventListener('keyup', this._handleKeyUp, true);
       this.isListening = false;
     }
   }
@@ -46,10 +61,10 @@ export class SpatialNavigation {
    * Scoped to active UI layers to keep candidate pool small and fast
    */
   getFocusableElements() {
-    // 1. If Quality Dialog is open, only navigate inside it
-    const qualityDialog = document.getElementById('quality-dialog');
-    if (qualityDialog && !qualityDialog.classList.contains('hidden')) {
-      return Array.from(qualityDialog.querySelectorAll('.nav-focusable:not([disabled])'));
+    // 1. If Quality Modal is open, only navigate inside it
+    const qualityModal = document.getElementById('quality-modal');
+    if (qualityModal && !qualityModal.classList.contains('hidden')) {
+      return Array.from(qualityModal.querySelectorAll('.nav-focusable:not([disabled])'));
     }
 
     // 2. If Player OSD is open, navigate player controls
@@ -191,8 +206,8 @@ export class SpatialNavigation {
     const isPlayerOpen = playerContainer && !playerContainer.classList.contains('hidden');
     const osd = document.getElementById('player-osd');
     const isOsdVisible = osd && osd.classList.contains('visible');
-    const qualityDialog = document.getElementById('quality-dialog');
-    const isQualityOpen = qualityDialog && !qualityDialog.classList.contains('hidden');
+    const qualityModal = document.getElementById('quality-modal');
+    const isQualityOpen = qualityModal && !qualityModal.classList.contains('hidden');
 
     // TV Media & Color Keys
     // Red=403, Green=404, Yellow=405, Blue=406, Play=415, Pause=19, Stop=413, PlayPause
@@ -274,6 +289,8 @@ export class SpatialNavigation {
     // Back key (webOS 461, Escape 27, Backspace 8)
     if (keyCode === 461 || e.key === 'Escape' || keyCode === 27 || keyCode === 8) {
       e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       if (this.backHandlers.length > 0) {
         const handler = this.backHandlers[this.backHandlers.length - 1];
         const handled = handler();

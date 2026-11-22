@@ -4,19 +4,19 @@
  */
 
 :root {
-  --bg-primary: #0e0e10;
-  --bg-secondary: #18181b;
-  --bg-elevated: #1f1f23;
-  --bg-hover: #26262c;
-  --text-primary: #efeff1;
-  --text-secondary: #adadb8;
-  --text-muted: #848494;
+  --bg-primary: #0a0a0c;
+  --bg-secondary: #131317;
+  --bg-elevated: #1c1c22;
+  --bg-hover: #26262e;
+  --text-primary: #f4f4f6;
+  --text-secondary: #b6b6c2;
+  --text-muted: #888898;
   --brand-purple: #9146ff;
-  --brand-purple-light: #bf94ff;
+  --brand-purple-light: #c49aff;
   --brand-purple-glow: rgba(145, 70, 255, 0.45);
   --live-red: #eb0400;
-  --focus-outline: #bf94ff;
-  --sidebar-width: 100px;
+  --focus-outline: #c49aff;
+  --sidebar-width: 112px;
 }
 
 * {
@@ -39,7 +39,7 @@ html, body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 18px;
+  font-size: 21px;
 }
 
 #app {
@@ -122,7 +122,7 @@ html, body {
 }
 
 .row-title {
-  font-size: 26px;
+  font-size: 32px;
   font-weight: 800;
   margin-bottom: 24px;
   color: var(--text-primary);
@@ -133,15 +133,15 @@ html, body {
 .live-pill {
   background-color: var(--live-red);
   color: #fff;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 /* Empty States */
