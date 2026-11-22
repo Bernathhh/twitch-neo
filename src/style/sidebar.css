@@ -1,0 +1,107 @@
+/**
+ * Twitch TV Native - Sidebar Navigation
+ */
+
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100vh;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 0 20px 0;
+  z-index: 40;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  margin-bottom: 32px;
+}
+
+.twitch-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  align-items: center;
+}
+
+.nav-item {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  position: relative;
+}
+
+.nav-item:hover,
+.nav-item.nav-focused {
+  color: #fff;
+  background-color: var(--bg-hover);
+}
+
+.nav-item.active {
+  color: var(--brand-purple-light);
+  background-color: rgba(145, 70, 255, 0.15);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  background-color: var(--brand-purple);
+  border-radius: 0 4px 4px 0;
+}
+
+.nav-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.nav-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.auth-avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-user-avatar-mini {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--brand-purple);
+  object-fit: cover;
+}

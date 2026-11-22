@@ -1,0 +1,14 @@
+{
+  "id": "org.webosbrew.twitch.native",
+  "version": "1.0.0",
+  "type": "web",
+  "title": "Twitch Native",
+  "appDescription": "Native, lightweight Twitch client for LG webOS TVs with 1440p60 and ad-free playback",
+  "iconUri": "icon.png",
+  "sourceUrl": "https://github.com/Bernathhh/twitch-webos-native",
+  "rootRequired": false,
+  "ipkUrl": "org.webosbrew.twitch.native_1.0.0_all.ipk",
+  "ipkHash": {
+    "sha256": "ed4482f251be83624bef764a6bea837efa53eed9a1da6440c57ade8a47f04e5f"
+  }
+}

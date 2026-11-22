@@ -1,0 +1,21 @@
+{
+  "id": "org.webosbrew.twitch.native",
+  "version": "1.0.0",
+  "vendor": "Bernath",
+  "type": "web",
+  "main": "index.html",
+  "title": "Twitch Native",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "splashBackground": "splash.png",
+  "iconColor": "#9146FF",
+  "vendorExtension": {
+    "allowCrossDomain": true
+  },
+  "enablePigScreenSaver": false,
+  "privilegedJail": true,
+  "supportQuickStart": true,
+  "requiredACG": [],
+  "disableBackHistoryAPI": false,
+  "supportGIP": true
+}

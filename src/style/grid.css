@@ -1,0 +1,260 @@
+/**
+ * Twitch TV Native - Cards & Grids
+ */
+
+/* Hero Banner */
+.hero-container {
+  width: 100%;
+  margin-bottom: 36px;
+}
+
+.hero-card {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  border-radius: 16px;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+  display: flex;
+  align-items: flex-end;
+  border: 1px solid var(--bg-elevated);
+}
+
+.hero-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.65);
+}
+
+.hero-gradient-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(0deg, #0e0e10 0%, rgba(14, 14, 16, 0.7) 40%, transparent 100%);
+}
+
+.hero-info {
+  position: relative;
+  z-index: 5;
+  padding: 32px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 65%;
+}
+
+.hero-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hero-viewers {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.hero-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hero-streamer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hero-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--brand-purple);
+}
+
+.hero-streamer-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.hero-game-name {
+  font-size: 15px;
+  color: var(--brand-purple-light);
+  font-weight: 600;
+}
+
+.hero-play-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 12px 28px;
+  background-color: var(--brand-purple);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Grids */
+.cards-grid {
+  display: grid;
+  gap: 24px;
+  width: 100%;
+}
+
+.stream-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.game-grid {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+/* Stream Card */
+.stream-card {
+  display: flex;
+  flex-direction: column;
+  background-color: transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  border: none;
+  text-align: left;
+}
+
+.card-thumb-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: var(--bg-secondary);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.card-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.badge-top-left {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.badge-bottom-left {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.card-meta {
+  display: flex;
+  gap: 12px;
+}
+
+.card-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--bg-elevated);
+}
+
+.card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-author {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-game {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Game Card */
+.game-card {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border: none;
+  text-align: left;
+}
+
+.game-thumb-container {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+  margin-bottom: 10px;
+}
+
+.game-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.game-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-viewers {
+  font-size: 13px;
+  color: var(--text-secondary);
+}

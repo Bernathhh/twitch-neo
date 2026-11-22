@@ -1,0 +1,290 @@
+/**
+ * Twitch TV Native - Main Stylesheet
+ * 1-to-1 Twitch TV dark theme, 1080p TV optimized layout, smooth animations
+ */
+
+:root {
+  --bg-primary: #0e0e10;
+  --bg-secondary: #18181b;
+  --bg-elevated: #1f1f23;
+  --bg-hover: #26262c;
+  --text-primary: #efeff1;
+  --text-secondary: #adadb8;
+  --text-muted: #70707c;
+  --brand-purple: #9146ff;
+  --brand-purple-light: #bf94ff;
+  --live-red: #eb0400;
+  --focus-outline: #bf94ff;
+  --sidebar-width: 90px;
+  --sidebar-expanded-width: 240px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+}
+
+#app {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Spatial Focus Style */
+.nav-focusable {
+  outline: none;
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), outline 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.nav-focusable.nav-focused,
+.nav-focusable:focus {
+  outline: 3px solid var(--focus-outline) !important;
+  outline-offset: 3px !important;
+  transform: scale(1.04);
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+}
+
+/* Hidden Utility */
+.hidden {
+  display: none !important;
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 36px 48px;
+  scroll-behavior: smooth;
+}
+
+/* View Sections */
+.view-section {
+  display: none;
+  width: 100%;
+  min-height: 100%;
+}
+
+.view-section.active {
+  display: block;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Row Headers */
+.content-row {
+  margin-top: 32px;
+}
+
+.row-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 18px;
+  color: var(--text-primary);
+}
+
+/* Live Badge */
+.live-pill {
+  background-color: var(--live-red);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Empty States */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 80px;
+  text-align: center;
+}
+
+.empty-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.empty-desc {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+/* Search Input */
+.search-bar-container {
+  margin-bottom: 32px;
+  max-width: 800px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 18px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 16px 20px 16px 56px;
+  background-color: var(--bg-secondary);
+  border: 2px solid var(--bg-elevated);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 18px;
+  transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+  border-color: var(--brand-purple);
+}
+
+/* Settings View */
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 900px;
+}
+
+.settings-group {
+  background-color: var(--bg-secondary);
+  border-radius: 14px;
+  padding: 24px 28px;
+  border: 1px solid var(--bg-elevated);
+}
+
+.settings-group-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--brand-purple-light);
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setting-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.status-badge {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.setting-static-badge {
+  background-color: rgba(145, 70, 255, 0.2);
+  color: var(--brand-purple-light);
+  border: 1px solid var(--brand-purple);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.selector-row {
+  display: flex;
+  gap: 10px;
+}
+
+.selector-btn {
+  background-color: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.selector-btn.active {
+  background-color: var(--brand-purple);
+  color: #fff;
+  border-color: var(--brand-purple-light);
+}
