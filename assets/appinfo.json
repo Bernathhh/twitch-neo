@@ -8,7 +8,7 @@
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
   "splashBackground": "splash.png",
-  "iconColor": "#9146FF",
+  "iconColor": "#08080a",
   "removable": true,
   "vendorExtension": {
     "allowCrossDomain": true
