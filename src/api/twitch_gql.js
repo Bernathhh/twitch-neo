@@ -239,9 +239,9 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
     }
   `;
 
-  // 'site' provides full unthrottled source stream up to 1440p60 HEVC/AVC
-  // 'popout' and 'embed' as fallbacks
-  const playerTypes = ['site', 'popout', 'embed'];
+  // 'popout' has full unthrottled 1440p60 HEVC/AVC and avoids Twitch SSAI preroll ads
+  // 'embed' and 'site' as fallbacks
+  const playerTypes = ['popout', 'embed', 'site'];
 
   for (const pt of playerTypes) {
     try {

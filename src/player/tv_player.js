@@ -72,6 +72,7 @@ export class TvPlayer {
     this.qualityToastEl = document.getElementById('quality-toast');
     this.qualityToastValueEl = document.getElementById('quality-toast-value');
     this.toastTimeout = null;
+    this.waitingTimeout = null;
 
     this.currentChannel = null;
     this.currentStreamData = null;
@@ -99,9 +100,14 @@ export class TvPlayer {
     this.btnStats.addEventListener('click', () => this.toggleStats());
     this.btnClose.addEventListener('click', () => this.close());
 
-    // Video events
-    this.videoEl.addEventListener('playing', () => {
+    const hideSpinnerNow = () => {
+      clearTimeout(this.waitingTimeout);
       this.hideSpinner();
+    };
+
+    // Video events: hide spinner immediately on any valid playback signal
+    this.videoEl.addEventListener('playing', () => {
+      hideSpinnerNow();
       this.iconPlay.classList.add('hidden');
       this.iconPause.classList.remove('hidden');
 
@@ -116,13 +122,30 @@ export class TvPlayer {
       }
     });
 
+    this.videoEl.addEventListener('timeupdate', () => {
+      if (this.videoEl.currentTime > 0 && !this.videoEl.paused) {
+        hideSpinnerNow();
+      }
+    });
+
+    this.videoEl.addEventListener('canplay', hideSpinnerNow);
+    this.videoEl.addEventListener('canplaythrough', hideSpinnerNow);
+    this.videoEl.addEventListener('loadeddata', hideSpinnerNow);
+
     this.videoEl.addEventListener('pause', () => {
+      clearTimeout(this.waitingTimeout);
       this.iconPlay.classList.remove('hidden');
       this.iconPause.classList.add('hidden');
     });
 
+    // Debounce waiting event to prevent flickering spinner during micro-buffer syncs
     this.videoEl.addEventListener('waiting', () => {
-      this.showSpinner();
+      clearTimeout(this.waitingTimeout);
+      this.waitingTimeout = setTimeout(() => {
+        if (this.isOpen() && (this.videoEl.paused || this.videoEl.readyState < 3)) {
+          this.showSpinner();
+        }
+      }, 350);
     });
 
     // Reset OSD timer on user activity inside player
@@ -540,16 +563,16 @@ export class TvPlayer {
 
         // 2. Ultra Low-Latency tuning for Twitch Live streams
         lowLatencyMode: true,
-        liveSyncDurationCount: 1,
-        liveMaxLatencyDurationCount: 3,
-        maxLiveSyncPlaybackRate: 1.08,
+        liveSyncDurationCount: 2,          // 2 segments (4s) behind live edge gives instant start and eliminates startup buffer starvation
+        liveMaxLatencyDurationCount: 4,    // 4 segments max latency before gentle catchup
+        maxLiveSyncPlaybackRate: 1.05,
         liveDurationInfinity: true,
 
         // 3. Memory-safe buffer limits (prevents TV RAM exhaustion and dropped frames on 1440p)
-        maxBufferLength: 4,
-        maxMaxBufferLength: 6,
-        maxBufferSize: 10 * 1024 * 1024, // 10 MB buffer cap
-        backBufferLength: 2,             // Aggressively flush passed frames for GPU memory
+        maxBufferLength: 6,
+        maxMaxBufferLength: 8,
+        maxBufferSize: 12 * 1024 * 1024,   // 12 MB buffer cap
+        backBufferLength: 2,               // Aggressively flush passed frames for GPU memory
         liveBackBufferLength: 2,
         frontBufferFlushThreshold: 8,
 
@@ -567,6 +590,12 @@ export class TvPlayer {
 
       this.hls.loadSource(srcUrl);
       this.hls.attachMedia(this.videoEl);
+
+      // Hide spinner immediately when first media fragment is buffered in hardware pipeline
+      this.hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        clearTimeout(this.waitingTimeout);
+        this.hideSpinner();
+      });
 
       this.hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
         console.log('[TvPlayer] Manifest parsed with levels:', data.levels.length);
@@ -671,6 +700,8 @@ export class TvPlayer {
   close() {
     this._stopStatsLoop();
     this.closeQualityDialog();
+
+    clearTimeout(this.waitingTimeout);
 
     if (this.qualityToastEl) {
       clearTimeout(this.toastTimeout);
