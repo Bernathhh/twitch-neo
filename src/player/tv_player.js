@@ -28,159 +28,6 @@ export function setPreferredQuality(val) {
   }
 }
 
-/**
- * 1440p Source AdBlock Interceptor (TwitchAdSolutions / VAFT engine)
- * Strips SSAI stitched ads and commercial breaks from 1440p chunklists
- */
-const AD_SIGNIFIERS = [
-  'stitched-ad',
-  'EXT-X-CUE-OUT',
-  'twitch-stitched',
-  'twitch-maf-ad',
-  '/adsquared/',
-  '/_404/',
-  '/processing'
-];
-
-let globalLastCleanM3u8 = '';
-let globalLastCleanTime = 0;
-
-function sendAdCompletionBeacon(dateRangeLine) {
-  try {
-    const idMatch = dateRangeLine.match(/ID="([^"]+)"/);
-    const radMatch = dateRangeLine.match(/X-TV-TWITCH-AD-RADS-TOKEN="([^"]+)"/);
-    if (!idMatch || !radMatch) return;
-
-    const stitchedAdId = idMatch[1];
-    const radToken = radMatch[1];
-
-    const gqlBody = {
-      query: `mutation MarkAdCompleted($input: MarkAdCompletedInput!) { markAdCompleted(input: $input) { error { code } } }`,
-      variables: {
-        input: {
-          adId: stitchedAdId,
-          radsToken: radToken
-        }
-      }
-    };
-    fetch('https://gql.twitch.tv/gql', {
-      method: 'POST',
-      headers: {
-        'Client-Id': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(gqlBody)
-    }).catch(() => {});
-  } catch (e) {}
-}
-
-function filterAdChunklist(text) {
-  if (!text || typeof text !== 'string') return text;
-  if (text.includes('#EXT-X-STREAM-INF:')) return text; // Pass through master playlist
-
-  let hasAdMarkers = false;
-  for (const sig of AD_SIGNIFIERS) {
-    if (text.includes(sig)) {
-      hasAdMarkers = true;
-      break;
-    }
-  }
-
-  const lines = text.split('\n');
-  const cleanLines = [];
-  let inCueOut = false;
-  let liveSegmentsCount = 0;
-  let strippedSegmentsCount = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.includes('EXT-X-CUE-OUT')) {
-      inCueOut = true;
-      hasAdMarkers = true;
-      continue;
-    }
-    if (line.includes('EXT-X-CUE-IN')) {
-      inCueOut = false;
-      continue;
-    }
-
-    if (line.startsWith('#EXT-X-DATERANGE:') && (line.includes('stitched') || line.includes('ad'))) {
-      hasAdMarkers = true;
-      sendAdCompletionBeacon(line);
-      continue;
-    }
-
-    // No low-latency prefetching during ads to prevent leaks
-    if (hasAdMarkers && (line.startsWith('#EXT-X-TWITCH-PREFETCH:') || line.startsWith('#EXT-X-PRELOAD-HINT:'))) {
-      continue;
-    }
-
-    if (line.startsWith('#EXTINF:')) {
-      const isLive = line.includes(',live');
-      const nextLine = (i + 1 < lines.length) ? lines[i + 1] : '';
-      const isAdUrl = nextLine.includes('/adsquared/') ||
-                      nextLine.includes('/processing') ||
-                      nextLine.includes('/_404/');
-
-      if (!isLive || inCueOut || isAdUrl) {
-        strippedSegmentsCount++;
-        hasAdMarkers = true;
-        if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
-          i++; // skip ad segment url
-        }
-        continue;
-      } else {
-        liveSegmentsCount++;
-        cleanLines.push(line);
-        if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
-          cleanLines.push(lines[i + 1]);
-          i++;
-        }
-        continue;
-      }
-    }
-
-    cleanLines.push(line);
-  }
-
-  if (liveSegmentsCount > 0) {
-    const filteredText = cleanLines.join('\n');
-    if (!hasAdMarkers && strippedSegmentsCount === 0) {
-      globalLastCleanM3u8 = filteredText;
-      globalLastCleanTime = Date.now();
-    }
-    return filteredText;
-  }
-
-  // If all segments in this poll were stitched ads (mid-roll break)
-  if (strippedSegmentsCount > 0) {
-    if (globalLastCleanM3u8 && (Date.now() - globalLastCleanTime < 8000)) {
-      console.log('[TvPlayer] 1440p ad break detected - replaying clean live stream snapshot');
-      return globalLastCleanM3u8;
-    }
-  }
-
-  return cleanLines.length > 3 ? cleanLines.join('\n') : text;
-}
-
-class AdBlockPlaylistLoader extends Hls.DefaultConfig.loader {
-  constructor(config) {
-    super(config);
-    const origLoad = this.load.bind(this);
-    this.load = (context, cfg, callbacks) => {
-      const origSuccess = callbacks.onSuccess;
-      callbacks.onSuccess = (response, stats, ctx, networkDetails) => {
-        if (response && typeof response.data === 'string' && response.data.includes('#EXTM3U')) {
-          response.data = filterAdChunklist(response.data);
-        }
-        origSuccess(response, stats, ctx, networkDetails);
-      };
-      origLoad(context, cfg, callbacks);
-    };
-  }
-}
-
 export class TvPlayer {
   constructor(options = {}) {
     this.options = options;
@@ -228,8 +75,6 @@ export class TvPlayer {
 
     this.currentChannel = null;
     this.currentStreamData = null;
-    globalLastCleanM3u8 = '';
-    globalLastCleanTime = 0;
     this.currentBlobUrl = null;
     this.currentRawManifest = null;
     this.currentSelectedLevel = -1; // -1 = Auto
@@ -474,21 +319,24 @@ export class TvPlayer {
   }
 
   _fallbackToStableQuality() {
-    if (!this.hls || !this.hls.levels) return;
+    if (!this.hls || !this.hls.levels || this.hls.levels.length === 0) return;
 
-    // Find 1080p or next best AVC level
+    // Find highest stable AVC level (preferably 1080p60, then 720p60) - never 160p
     let targetIdx = -1;
+    let bestHeight = 0;
     for (let i = 0; i < this.hls.levels.length; i++) {
       const lvl = this.hls.levels[i];
-      if (lvl.height <= 1080) {
+      const h = lvl.height || 0;
+      if (h <= 1080 && h > bestHeight) {
+        bestHeight = h;
         targetIdx = i;
-        break;
       }
     }
 
     if (targetIdx !== -1 && targetIdx !== this.currentSelectedLevel) {
-      this.qualityLabelEl.textContent = '1080p60 (Auto-Stable)';
-      this._selectQualityLevel(targetIdx, '1080p60');
+      const label = `${bestHeight}p60 (Auto-Stable)`;
+      this.qualityLabelEl.textContent = label;
+      this._selectQualityLevel(targetIdx, label);
     } else {
       this.reload();
     }
@@ -686,9 +534,6 @@ export class TvPlayer {
 
     if (Hls.isSupported()) {
       this.hls = new Hls({
-        // AdBlock: Playlist loader interceptor for 1440p Source SSAI ad removal
-        pLoader: AdBlockPlaylistLoader,
-
         // CRITICAL FOR WEBOS:
         // 1. enableWorker: false eliminates worker thread IPC overhead on ARM dual/quad-core TV CPUs
         enableWorker: false,
@@ -850,8 +695,6 @@ export class TvPlayer {
     this.containerEl.classList.add('hidden');
     this.currentChannel = null;
     this.currentStreamData = null;
-    globalLastCleanM3u8 = '';
-    globalLastCleanTime = 0;
 
     if (this.options.onClose) {
       this.options.onClose();
