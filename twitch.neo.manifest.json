@@ -1,14 +1,14 @@
 {
   "id": "tv.twitch.neo",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "type": "web",
   "title": "Twitch Neo",
   "appDescription": "Next-generation lightweight Twitch client for LG webOS TVs with 1440p60 and ad-free playback",
   "iconUri": "icon.png",
   "sourceUrl": "https://github.com/Bernathhh/twitch-neo",
   "rootRequired": false,
-  "ipkUrl": "tv.twitch.neo_1.0.11_all.ipk",
+  "ipkUrl": "tv.twitch.neo_1.0.12_all.ipk",
   "ipkHash": {
-    "sha256": "689920905c1e767c05ce927c9e59b2d68f74a76a579349dd489c32da0dbd10e8"
+    "sha256": "e83ea604c2c84aef8ba1d4624e1ef1f3dc57f42d77aaf70ef8aa224cbd1cddea"
   }
 }

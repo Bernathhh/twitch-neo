@@ -3,14 +3,11 @@
  * Integrates Luminous (TTV LOL PRO) and ReYohoho proxies for 100% ad-free 1440p/1080p playback
  */
 
-import { getStoredToken } from './twitch_auth';
-
 export const PROXY_PROVIDERS = [
   { id: 'proxy4', name: 'ReYohoho Server 4 (Россия - 1440p)', type: 'usher', url: 'https://proxy4.rte.net.ru/' },
   { id: 'proxy7', name: 'ReYohoho Server 7 (1440p)', type: 'usher', url: 'https://proxy7.rte.net.ru/' },
   { id: 'proxy5', name: 'ReYohoho Server 5 (1440p)', type: 'usher', url: 'https://proxy5.rte.net.ru/' },
   { id: 'proxy6', name: 'ReYohoho Server 6 (1440p)', type: 'usher', url: 'https://proxy6.rte.net.ru/' },
-  { id: 'direct', name: 'Twitch Direct (Официальный)', type: 'usher', url: 'https://usher.ttvnw.net/' },
   { id: 'luminous_eu', name: 'Luminous EU (Ad-Free PRO)', type: 'direct', url: 'https://eu.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true&low_latency=true' },
   { id: 'luminous_eu2', name: 'Luminous EU 2', type: 'direct', url: 'https://eu2.luminous.dev/playlist/{channel}?allow_source=true&allow_audio_only=true&fast_bread=true&low_latency=true' }
 ];
@@ -22,8 +19,8 @@ const STORAGE_KEY_PROXY = 'twitch_native_proxy_server';
 export function getCurrentProxyServer() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY_PROXY);
-    // If previously saved to Luminous (which lacks 1440p) or outdated url, auto-migrate to proxy4
-    if (saved && (saved.includes('luminous.dev') || !PROXY_PROVIDERS.some(s => s.url === saved))) {
+    // If previously saved to Luminous or direct (has ads) or outdated url, auto-migrate to proxy4
+    if (saved && (saved.includes('luminous.dev') || saved.includes('usher.ttvnw.net') || !PROXY_PROVIDERS.some(s => s.url === saved))) {
       localStorage.setItem(STORAGE_KEY_PROXY, PROXY_PROVIDERS[0].url);
       return PROXY_PROVIDERS[0].url;
     }
@@ -91,7 +88,6 @@ export async function fetchLiveManifest(channelLogin, sig, token) {
   ];
 
   let lastError = null;
-  const userAuthToken = getStoredToken();
 
   for (const server of serversToTry) {
     try {
@@ -107,14 +103,12 @@ export async function fetchLiveManifest(channelLogin, sig, token) {
           low_latency: 'true',
           supported_codecs: 'h265,h264'
         });
-        if (userAuthToken) {
-          usherParams.set('auth', userAuthToken);
-        }
+        // Never append user auth token: user auth triggers Twitch SSAI ad breaks on non-Turbo accounts
         fullUrl = `${server}https://usher.ttvnw.net/api/channel/hls/${encodeURIComponent(channelLogin)}.m3u8?${usherParams.toString()}`;
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
 
       const res = await fetch(fullUrl, {
         method: 'GET',

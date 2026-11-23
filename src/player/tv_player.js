@@ -8,7 +8,6 @@ import Hls from 'hls.js';
 import { fetchPlaybackAccessToken } from '../api/twitch_gql';
 import { fetchLiveManifest } from '../api/reyohoho_proxy';
 import { createManifestBlobUrl, patchMediaCodecs, isHevcCodec } from './codecs';
-import { getStoredToken } from '../api/twitch_auth';
 
 export const STORAGE_KEY_QUALITY = 'twitch_neo_preferred_quality';
 
@@ -73,6 +72,8 @@ export class TvPlayer {
     this.qualityToastValueEl = document.getElementById('quality-toast-value');
     this.toastTimeout = null;
     this.waitingTimeout = null;
+    this.lastPlayheadTime = -1;
+    this.lastPlayheadAdvance = 0;
 
     this.currentChannel = null;
     this.currentStreamData = null;
@@ -108,6 +109,7 @@ export class TvPlayer {
     // Video events: hide spinner immediately on any valid playback signal
     this.videoEl.addEventListener('playing', () => {
       hideSpinnerNow();
+      this.lastPlayheadAdvance = Date.now();
       this.iconPlay.classList.add('hidden');
       this.iconPause.classList.remove('hidden');
 
@@ -123,8 +125,13 @@ export class TvPlayer {
     });
 
     this.videoEl.addEventListener('timeupdate', () => {
-      if (this.videoEl.currentTime > 0 && !this.videoEl.paused) {
-        hideSpinnerNow();
+      const cur = this.videoEl.currentTime;
+      if (cur > 0 && Math.abs(cur - this.lastPlayheadTime) > 0.05) {
+        this.lastPlayheadTime = cur;
+        this.lastPlayheadAdvance = Date.now();
+        if (!this.videoEl.paused) {
+          hideSpinnerNow();
+        }
       }
     });
 
@@ -138,14 +145,16 @@ export class TvPlayer {
       this.iconPause.classList.add('hidden');
     });
 
-    // Debounce waiting event to prevent flickering spinner during micro-buffer syncs
+    // Only show spinner if playback is genuinely stalled (no progress for at least 1800ms)
+    // Micro-buffer syncs and regular fragment transitions must never flicker the spinner
     this.videoEl.addEventListener('waiting', () => {
       clearTimeout(this.waitingTimeout);
       this.waitingTimeout = setTimeout(() => {
-        if (this.isOpen() && (this.videoEl.paused || this.videoEl.readyState < 3)) {
+        const stalledTime = Date.now() - (this.lastPlayheadAdvance || 0);
+        if (this.isOpen() && !this.videoEl.paused && stalledTime >= 1800) {
           this.showSpinner();
         }
-      }, 350);
+      }, 1800);
     });
 
     // Reset OSD timer on user activity inside player
@@ -162,6 +171,7 @@ export class TvPlayer {
   }
 
   hideSpinner() {
+    clearTimeout(this.waitingTimeout);
     this.spinnerEl.classList.add('hidden');
   }
 
@@ -524,9 +534,9 @@ export class TvPlayer {
     this.qualityLabelEl.textContent = 'Auto';
 
     try {
-      // 1. Fetch playback access token
-      const authToken = getStoredToken();
-      const { sig, token } = await fetchPlaybackAccessToken(this.currentChannel, authToken);
+      // 1. Fetch playback access token anonymously (without user OAuth token)
+      // Passing user auth causes Twitch SSAI to identify non-Turbo accounts and inject commercial breaks
+      const { sig, token } = await fetchPlaybackAccessToken(this.currentChannel, null);
 
       // 2. Fetch live master playlist via ReYohoho proxy
       const { manifest, serverUrl } = await fetchLiveManifest(this.currentChannel, sig, token);
@@ -563,18 +573,18 @@ export class TvPlayer {
 
         // 2. Ultra Low-Latency tuning for Twitch Live streams
         lowLatencyMode: true,
-        liveSyncDurationCount: 2,          // 2 segments (4s) behind live edge gives instant start and eliminates startup buffer starvation
-        liveMaxLatencyDurationCount: 4,    // 4 segments max latency before gentle catchup
+        liveSyncDurationCount: 3,          // 3 segments (6s) behind live edge: eliminates micro-buffer underruns and waiting flicker
+        liveMaxLatencyDurationCount: 6,    // 6 segments max latency before gentle catchup
         maxLiveSyncPlaybackRate: 1.05,
         liveDurationInfinity: true,
 
         // 3. Memory-safe buffer limits (prevents TV RAM exhaustion and dropped frames on 1440p)
-        maxBufferLength: 6,
-        maxMaxBufferLength: 8,
-        maxBufferSize: 12 * 1024 * 1024,   // 12 MB buffer cap
-        backBufferLength: 2,               // Aggressively flush passed frames for GPU memory
-        liveBackBufferLength: 2,
-        frontBufferFlushThreshold: 8,
+        maxBufferLength: 8,
+        maxMaxBufferLength: 12,
+        maxBufferSize: 20 * 1024 * 1024,   // 20 MB buffer cap
+        backBufferLength: 3,               // Aggressively flush passed frames for GPU memory
+        liveBackBufferLength: 3,
+        frontBufferFlushThreshold: 10,
 
         // 4. Disable Hls.js internal nudging (which triggers synchronous IPC SeekTo deadlocks on webOS)
         highBufferWatchdogPeriod: 0,

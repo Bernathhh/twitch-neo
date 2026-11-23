@@ -245,7 +245,8 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
 
   for (const pt of playerTypes) {
     try {
-      const data = await postGql(query, { login: channelLogin, playerType: pt }, token);
+      // Always request playback token anonymously (null auth) to prevent Twitch SSAI ad targeting
+      const data = await postGql(query, { login: channelLogin, playerType: pt }, null);
       const tokenData = data?.streamPlaybackAccessToken;
       if (tokenData && tokenData.signature && tokenData.value) {
         return {
