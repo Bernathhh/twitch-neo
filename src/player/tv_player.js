@@ -8,6 +8,8 @@ import Hls from 'hls.js';
 import { fetchPlaybackAccessToken } from '../api/twitch_gql';
 import { fetchLiveManifest } from '../api/reyohoho_proxy';
 import { createManifestBlobUrl, patchMediaCodecs, isHevcCodec } from './codecs';
+import { createAdBlockPlaylistLoader } from './adblock_loader';
+import { getStoredToken } from '../api/twitch_auth';
 
 export const STORAGE_KEY_QUALITY = 'twitch_neo_preferred_quality';
 
@@ -86,6 +88,7 @@ export class TvPlayer {
     this.isStatsVisible = false;
     this.isQualityDialogVisible = false;
     this.lastUsedProxy = '';
+    this.adBlockLoader = createAdBlockPlaylistLoader();
 
     // Apply global webOS MSE & codec patches immediately
     patchMediaCodecs();
@@ -534,20 +537,20 @@ export class TvPlayer {
     this.qualityLabelEl.textContent = 'Auto';
 
     try {
-      // 1. Fetch playback access token anonymously (without user OAuth token)
-      // Passing user auth causes Twitch SSAI to identify non-Turbo accounts and inject commercial breaks
-      const { sig, token } = await fetchPlaybackAccessToken(this.currentChannel, null);
+      // 1. Fetch playback access token (passes OAuth token if user is signed in to eliminate anti-bot ad slates)
+      const authToken = getStoredToken();
+      const { sig, token } = await fetchPlaybackAccessToken(this.currentChannel, authToken);
 
       // 2. Fetch live master playlist via ReYohoho proxy
       const { manifest, serverUrl } = await fetchLiveManifest(this.currentChannel, sig, token);
       this.lastUsedProxy = serverUrl;
       this.currentRawManifest = manifest;
 
-      // 3. Patch codecs and create blob URL
+      // 3. Patch codecs, route variant playlists through proxy and create blob URL
       if (this.currentBlobUrl) {
         URL.revokeObjectURL(this.currentBlobUrl);
       }
-      this.currentBlobUrl = createManifestBlobUrl(manifest);
+      this.currentBlobUrl = createManifestBlobUrl(manifest, serverUrl);
 
       // 4. Initialize Hls.js with TV-safe limits
       this._initHls(this.currentBlobUrl, -1);
@@ -567,6 +570,9 @@ export class TvPlayer {
 
     if (Hls.isSupported()) {
       this.hls = new Hls({
+        // AdBlock: Playlist loader interceptor to strip stitched ads and Commercial Break slates
+        pLoader: this.adBlockLoader,
+
         // CRITICAL FOR WEBOS:
         // 1. enableWorker: false eliminates worker thread IPC overhead on ARM dual/quad-core TV CPUs
         enableWorker: false,

@@ -3,6 +3,8 @@
  * Integrates Luminous (TTV LOL PRO) and ReYohoho proxies for 100% ad-free 1440p/1080p playback
  */
 
+import { getStoredToken } from './twitch_auth';
+
 export const PROXY_PROVIDERS = [
   { id: 'proxy4', name: 'ReYohoho Server 4 (Россия - 1440p)', type: 'usher', url: 'https://proxy4.rte.net.ru/' },
   { id: 'proxy7', name: 'ReYohoho Server 7 (1440p)', type: 'usher', url: 'https://proxy7.rte.net.ru/' },
@@ -103,7 +105,11 @@ export async function fetchLiveManifest(channelLogin, sig, token) {
           low_latency: 'true',
           supported_codecs: 'h265,h264'
         });
-        // Never append user auth token: user auth triggers Twitch SSAI ad breaks on non-Turbo accounts
+        // Pass OAuth token to ReYohoho backend if user is logged in (required to bypass anti-scraper ad slate and unlock 1440p)
+        const userAuthToken = getStoredToken();
+        if (userAuthToken) {
+          usherParams.set('auth', userAuthToken);
+        }
         fullUrl = `${server}https://usher.ttvnw.net/api/channel/hls/${encodeURIComponent(channelLogin)}.m3u8?${usherParams.toString()}`;
       }
 

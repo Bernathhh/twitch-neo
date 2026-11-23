@@ -142,12 +142,14 @@ export function patchMediaCodecs() {
 
 /**
  * Patches HLS master manifest text for LG webOS hardware decoder compatibility
+ * and routes variant playlist requests through the AdBlock proxy
  */
-export function patchMasterManifest(manifestText) {
+export function patchMasterManifest(manifestText, serverUrl = '') {
   if (!manifestText || typeof manifestText !== 'string') return manifestText;
 
   const lines = manifestText.split('\n');
   const result = [];
+  const isUsherProxy = serverUrl && serverUrl.includes('rte.net.ru');
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -183,6 +185,9 @@ export function patchMasterManifest(manifestText) {
       });
 
       result.push(patchedLine);
+    } else if (line.startsWith('https://') && isUsherProxy) {
+      // Route variant playlist requests through the AdBlock proxy so the TV never leaks its direct IP
+      result.push(line.startsWith(serverUrl) ? line : `${serverUrl}${line}`);
     } else {
       result.push(line);
     }
@@ -194,8 +199,8 @@ export function patchMasterManifest(manifestText) {
 /**
  * Creates a Blob URL for the patched master manifest
  */
-export function createManifestBlobUrl(manifestText) {
-  const patched = patchMasterManifest(manifestText);
+export function createManifestBlobUrl(manifestText, serverUrl = '') {
+  const patched = patchMasterManifest(manifestText, serverUrl);
   const blob = new Blob([patched], { type: 'application/vnd.apple.mpegurl' });
   return URL.createObjectURL(blob);
 }

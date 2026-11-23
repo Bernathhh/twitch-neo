@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/version-v1.0.12-blueviolet.svg" alt="Version 1.0.12">
+  <img src="https://img.shields.io/badge/version-v1.0.13-blueviolet.svg" alt="Version 1.0.13">
   <img src="https://img.shields.io/badge/webOS-4.0%2B-purple.svg" alt="webOS 4.0+">
   <img src="https://img.shields.io/badge/Resolution-1440p60%20%2F%201080p60-success.svg" alt="1440p60">
   <img src="https://img.shields.io/badge/Package-389%20KB-brightgreen.svg" alt="Package Size">
@@ -80,7 +80,7 @@
 ## 📦 Установка
 
 ### Способ 1: Через webOS Dev Manager (Рекомендуемый)
-1. Скачайте свежий файл `tv.twitch.neo_1.0.12_all.ipk` из [Релизов](https://github.com/Bernathhh/twitch-neo/releases).
+1. Скачайте свежий файл `tv.twitch.neo_1.0.13_all.ipk` из [Релизов](https://github.com/Bernathhh/twitch-neo/releases).
 2. Откройте **webOS Dev Manager** на вашем компьютере.
 3. Нажмите кнопку **«Install»** вверху экрана и выберите скачанный `.ipk` файл (или просто перетащите файл в окно программы).
 
@@ -90,7 +90,7 @@
 
 ### Способ 3: Через терминал / CLI
 ```bash
-ares-install -d <имя_устройства> tv.twitch.neo_1.0.12_all.ipk
+ares-install -d <имя_устройства> tv.twitch.neo_1.0.13_all.ipk
 ```
 
 ---
