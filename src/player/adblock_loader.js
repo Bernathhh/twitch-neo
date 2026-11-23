@@ -100,8 +100,8 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
   }
 
   // If ALL segments in this poll were ad segments:
-  // Reuse last clean playlist if recent (< 3.5s) to prevent player stalling or playing the commercial break
-  if (recoveryCache && recoveryCache.lastCleanText && (Date.now() - recoveryCache.lastCleanTime < 3500)) {
+  // Reuse last clean playlist if recent (< 60s) to prevent player stalling or playing the commercial break
+  if (recoveryCache && recoveryCache.lastCleanText && (Date.now() - recoveryCache.lastCleanTime < 60000)) {
     return recoveryCache.lastCleanText;
   }
 

@@ -163,6 +163,7 @@ export function patchMasterManifest(manifestText, serverUrl = '') {
     }
 
     if (line.startsWith('#EXT-X-STREAM-INF:')) {
+      const is1080 = line.includes('1920x1080') || line.includes('1080p');
       const patchedLine = line.replace(/CODECS="([^"]+)"/, (_match, codecsAttr) => {
         const tokens = codecsAttr.split(',').map(t => t.trim());
         const patchedTokens = tokens.map(token => {
@@ -171,8 +172,15 @@ export function patchMasterManifest(manifestText, serverUrl = '') {
             // Trim non-standard constraint flags and normalize to hvc1.1.6.L150.B0
             return 'hvc1.1.6.L150.B0';
           }
-          // Clamp AVC levels above 4.2 to 4.2 (avc1.64002a)
+          // Normalize AVC
           if (token.startsWith('avc1.')) {
+            // Twitch tags 1080p transcodes with avc1.4D401F (Level 3.1),
+            // which causes webOS Starfish decoder to allocate insufficient buffers and renegotiate.
+            // Normalize all 1080p AVC to Level 4.2 High Profile (avc1.64002a).
+            if (is1080) {
+              return 'avc1.64002a';
+            }
+            // Clamp AVC levels above 4.2 to 4.2 (avc1.64002a)
             const levelHex = token.slice(9, 11);
             const levelDec = parseInt(levelHex, 16);
             if (!isNaN(levelDec) && levelDec > 0x2a) {

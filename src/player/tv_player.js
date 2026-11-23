@@ -29,6 +29,53 @@ export function setPreferredQuality(val) {
   }
 }
 
+/**
+ * Calculates initial level index directly from manifest text to avoid starting
+ * on the wrong codec/resolution (e.g. starting HEVC Level 0 and switching to AVC 1080p).
+ */
+export function getInitialTargetLevel(manifestText, preferredQuality = 'max') {
+  if (!manifestText || typeof manifestText !== 'string') return -1;
+  const lines = manifestText.split('\n');
+  const variants = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('#EXT-X-STREAM-INF:') && (line.includes('av01') || (line.includes('av1') && !line.includes('avc1')))) {
+      continue;
+    }
+    if (line.startsWith('#EXT-X-STREAM-INF:')) {
+      const resMatch = line.match(/RESOLUTION=(\d+)x(\d+)/);
+      const height = resMatch ? parseInt(resMatch[2], 10) : 0;
+      const bwMatch = line.match(/BANDWIDTH=(\d+)/);
+      const bitrate = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+      variants.push({ index: variants.length, height, bitrate });
+    }
+  }
+
+  if (variants.length === 0) return -1;
+
+  if (preferredQuality === 'max') {
+    let best = variants[0];
+    for (let i = 1; i < variants.length; i++) {
+      const v = variants[i];
+      if (v.height > best.height || (v.height === best.height && v.bitrate > best.bitrate)) {
+        best = v;
+      }
+    }
+    return best.index;
+  }
+
+  if (preferredQuality === '1080p') {
+    const v1080 = variants.find(v => v.height === 1080);
+    if (v1080) return v1080.index;
+  } else if (preferredQuality === '720p') {
+    const v720 = variants.find(v => v.height === 720);
+    if (v720) return v720.index;
+  }
+
+  return 0;
+}
+
 export class TvPlayer {
   constructor(options = {}) {
     this.options = options;
@@ -552,8 +599,14 @@ export class TvPlayer {
       }
       this.currentBlobUrl = createManifestBlobUrl(manifest, serverUrl);
 
-      // 4. Initialize Hls.js with TV-safe limits
-      this._initHls(this.currentBlobUrl, -1);
+      // 4. Determine initial start level according to user's preferred quality
+      // Starting directly on the target level prevents starting HEVC Level 0 and then
+      // attempting an in-flight switch to AVC 1080p, which crashes/stalls webOS MSE.
+      const pref = getPreferredQuality();
+      const initialLevel = getInitialTargetLevel(manifest, pref);
+
+      // 5. Initialize Hls.js with TV-safe limits and pre-determined level
+      this._initHls(this.currentBlobUrl, initialLevel);
     } catch (err) {
       console.error('[TvPlayer] Playback start failed:', err);
       this.hideSpinner();
@@ -579,8 +632,8 @@ export class TvPlayer {
 
         // 2. Ultra Low-Latency tuning for Twitch Live streams
         lowLatencyMode: true,
-        liveSyncDurationCount: 3,          // 3 segments (6s) behind live edge: eliminates micro-buffer underruns and waiting flicker
-        liveMaxLatencyDurationCount: 6,    // 6 segments max latency before gentle catchup
+        liveSyncDurationCount: 2,          // 2 segments (4s) behind live edge: instant start without startup starvation
+        liveMaxLatencyDurationCount: 5,    // 5 segments max latency before gentle catchup
         maxLiveSyncPlaybackRate: 1.05,
         liveDurationInfinity: true,
 
@@ -617,7 +670,7 @@ export class TvPlayer {
         console.log('[TvPlayer] Manifest parsed with levels:', data.levels.length);
 
         let targetLevel = startLevel;
-        if (targetLevel === -1) {
+        if (targetLevel === -1 || !data.levels[targetLevel]) {
           const pref = getPreferredQuality();
           if (pref === 'max') {
             // Find highest resolution level (1440p60 if available, else 1080p60)
@@ -652,7 +705,6 @@ export class TvPlayer {
 
         if (targetLevel >= 0 && data.levels[targetLevel]) {
           this.hls.currentLevel = targetLevel;
-          this.hls.loadLevel = targetLevel;
           this.currentSelectedLevel = targetLevel;
 
           const lvl = data.levels[targetLevel];

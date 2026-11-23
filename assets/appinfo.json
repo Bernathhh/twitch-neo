@@ -1,6 +1,6 @@
 {
   "id": "tv.twitch.neo",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "vendor": "Pavel Bernat",
   "type": "web",
   "main": "index.html",
