@@ -11,6 +11,35 @@ const AD_SIGNIFIERS = [
   'EXT-X-DATERANGE:CLASS="twitch-maf-ad"'
 ];
 
+function sendAdCompletionBeacon(dateRangeLine) {
+  try {
+    const idMatch = dateRangeLine.match(/ID="([^"]+)"/);
+    const radMatch = dateRangeLine.match(/X-TV-TWITCH-AD-RADS-TOKEN="([^"]+)"/);
+    if (!idMatch || !radMatch) return;
+
+    const stitchedAdId = idMatch[1];
+    const radToken = radMatch[1];
+
+    const gqlBody = {
+      query: `mutation MarkAdCompleted($input: MarkAdCompletedInput!) { markAdCompleted(input: $input) { error { code } } }`,
+      variables: {
+        input: {
+          adId: stitchedAdId,
+          radsToken: radToken
+        }
+      }
+    };
+    fetch('https://gql.twitch.tv/gql', {
+      method: 'POST',
+      headers: {
+        'Client-Id': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(gqlBody)
+    }).catch(() => {});
+  } catch (e) {}
+}
+
 export function filterAdMediaPlaylist(text, recoveryCache) {
   if (!text || typeof text !== 'string') return text;
   if (text.includes('#EXT-X-STREAM-INF:')) return text; // Pass master manifests unchanged
@@ -70,8 +99,9 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
       continue;
     }
 
-    // Skip ad DATERANGE
-    if (line.startsWith('#EXT-X-DATERANGE:') && (line.includes('stitched') || line.includes('twitch-maf'))) {
+    // Skip ad DATERANGE & notify Twitch ad completed
+    if (line.startsWith('#EXT-X-DATERANGE:') && (line.includes('stitched') || line.includes('twitch-maf') || line.includes('ad'))) {
+      sendAdCompletionBeacon(line);
       continue;
     }
 

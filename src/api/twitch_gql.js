@@ -243,9 +243,10 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
   // 'embed' and 'site' as fallbacks
   const playerTypes = ['popout', 'embed', 'site'];
 
+  // 1. Request playback token anonymously to prevent Twitch SSAI ad targeting on user accounts
   for (const pt of playerTypes) {
     try {
-      const data = await postGql(query, { login: channelLogin, playerType: pt }, token);
+      const data = await postGql(query, { login: channelLogin, playerType: pt }, null);
       const tokenData = data?.streamPlaybackAccessToken;
       if (tokenData && tokenData.signature && tokenData.value) {
         return {
@@ -255,6 +256,22 @@ export async function fetchPlaybackAccessToken(channelLogin, token = null) {
       }
     } catch (e) {
       // try next playerType
+    }
+  }
+
+  // 2. Fallback with user auth token (e.g. for subscriber-only streams)
+  if (token) {
+    for (const pt of playerTypes) {
+      try {
+        const data = await postGql(query, { login: channelLogin, playerType: pt }, token);
+        const tokenData = data?.streamPlaybackAccessToken;
+        if (tokenData && tokenData.signature && tokenData.value) {
+          return {
+            sig: tokenData.signature,
+            token: tokenData.value
+          };
+        }
+      } catch (e) {}
     }
   }
 

@@ -553,11 +553,11 @@ export class TvPlayer {
       this.lastUsedProxy = serverUrl;
       this.currentRawManifest = manifest;
 
-      // 3. Patch codecs, route variant playlists through proxy and create blob URL
+      // 3. Patch codecs and create direct CDN blob URL (direct variant loading eliminates commercial breaks and proxy lag)
       if (this.currentBlobUrl) {
         URL.revokeObjectURL(this.currentBlobUrl);
       }
-      this.currentBlobUrl = createManifestBlobUrl(manifest, serverUrl);
+      this.currentBlobUrl = createManifestBlobUrl(manifest);
 
       // 4. Initialize Hls.js with TV-safe limits (start in auto mode so MANIFEST_PARSED selects optimal level)
       this._initHls(this.currentBlobUrl, -1);
@@ -586,9 +586,9 @@ export class TvPlayer {
 
         // 2. Ultra Low-Latency tuning for Twitch Live streams
         lowLatencyMode: true,
-        liveSyncDurationCount: 3,          // 3 segments (6s) behind live edge: eliminates micro-buffer underruns and waiting flicker
-        liveMaxLatencyDurationCount: 6,    // 6 segments max latency before gentle catchup
-        maxLiveSyncPlaybackRate: 1.05,
+        liveSyncDurationCount: 2,          // 2 segments (4s) behind live edge: instant start without lag
+        liveMaxLatencyDurationCount: 5,    // 5 segments max latency before gentle catchup
+        maxLiveSyncPlaybackRate: 1.06,
         liveDurationInfinity: true,
 
         // 3. Memory-safe buffer limits (prevents TV RAM exhaustion and dropped frames on 1440p)

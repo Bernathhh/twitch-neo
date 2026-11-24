@@ -105,11 +105,7 @@ export async function fetchLiveManifest(channelLogin, sig, token) {
           low_latency: 'true',
           supported_codecs: 'h265,h264'
         });
-        // Pass OAuth token to ReYohoho backend if user is logged in (required to bypass anti-scraper ad slate and unlock 1440p)
-        const userAuthToken = getStoredToken();
-        if (userAuthToken) {
-          usherParams.set('auth', userAuthToken);
-        }
+        // Never append user auth token: user auth triggers Twitch SSAI ad breaks on non-Turbo accounts
         fullUrl = `${server}https://usher.ttvnw.net/api/channel/hls/${encodeURIComponent(channelLogin)}.m3u8?${usherParams.toString()}`;
       }
 
