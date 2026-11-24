@@ -11,13 +11,19 @@ const AD_SIGNIFIERS = [
   'EXT-X-DATERANGE:CLASS="twitch-maf-ad"'
 ];
 
-function sendAdCompletionBeacon(dateRangeLine) {
+function sendAdCompletionBeacon(dateRangeLine, sentBeacons) {
   try {
     const idMatch = dateRangeLine.match(/ID="([^"]+)"/);
     const radMatch = dateRangeLine.match(/X-TV-TWITCH-AD-RADS-TOKEN="([^"]+)"/);
     if (!idMatch || !radMatch) return;
 
     const stitchedAdId = idMatch[1];
+    if (sentBeacons) {
+      if (sentBeacons.has(stitchedAdId)) return;
+      if (sentBeacons.size > 100) sentBeacons.clear();
+      sentBeacons.add(stitchedAdId);
+    }
+
     const radToken = radMatch[1];
 
     const gqlBody = {
@@ -53,25 +59,23 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
   }
 
   const lines = text.split('\n');
-  const liveSegments = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith('#EXTINF:') && line.includes(',live') && i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
-      liveSegments.push({ extinf: line, url: lines[i + 1] });
-    }
-  }
 
   if (!hasAdMarkers) {
-    if (liveSegments.length > 0 && recoveryCache) {
+    let hasLive = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('#EXTINF:') && i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
+        hasLive = true;
+        break;
+      }
+    }
+    if (hasLive && recoveryCache) {
       recoveryCache.lastCleanText = text;
       recoveryCache.lastCleanTime = Date.now();
-      recoveryCache.liveSegments = liveSegments.slice(-6);
     }
     return text;
   }
 
-  // Ad detected: strip ad segments & ad tags
+  // Ad detected: strip ad segments, ad init maps, orphaned program-date-time & ad tags
   const cleanLines = [];
   let inCueOut = false;
   let liveFound = 0;
@@ -79,6 +83,9 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
   let seenFirstLive = false;
   let origMediaSeq = -1;
   let mediaSeqLineIdx = -1;
+  let pendingDateTime = null;
+  let pendingMapLine = null;
+  const sentBeacons = recoveryCache && recoveryCache.sentBeacons;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -92,6 +99,8 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
 
     if (line.includes('EXT-X-CUE-OUT')) {
       inCueOut = true;
+      pendingDateTime = null;
+      pendingMapLine = null;
       continue;
     }
     if (line.includes('EXT-X-CUE-IN') || (line.startsWith('#EXT-X-DATERANGE:') && line.includes('twitch-stream-source'))) {
@@ -99,9 +108,9 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
       continue;
     }
 
-    // Skip ad DATERANGE & notify Twitch ad completed
+    // Skip ad DATERANGE & notify Twitch ad completed once per adId
     if (line.startsWith('#EXT-X-DATERANGE:') && (line.includes('stitched') || line.includes('twitch-maf') || line.includes('ad'))) {
-      sendAdCompletionBeacon(line);
+      sendAdCompletionBeacon(line, sentBeacons);
       continue;
     }
 
@@ -110,10 +119,31 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
       continue;
     }
 
+    // Track per-segment program-date-time so skipped ads don't orphan timestamps
+    if (line.startsWith('#EXT-X-PROGRAM-DATE-TIME:')) {
+      pendingDateTime = line;
+      continue;
+    }
+
+    // Do not leak ad init segment map into live stream
+    if (line.startsWith('#EXT-X-MAP:')) {
+      if (inCueOut) continue;
+      pendingMapLine = line;
+      continue;
+    }
+
+    // Avoid leading/ad discontinuity tags when ad chunks were stripped
+    if (line.startsWith('#EXT-X-DISCONTINUITY')) {
+      if (inCueOut || liveFound === 0) continue;
+      cleanLines.push(line);
+      continue;
+    }
+
     if (line.startsWith('#EXTINF:')) {
       const isLive = line.includes(',live');
       if (inCueOut || !isLive || line.includes('Amazon')) {
         // Skip ad segment and its URL
+        pendingDateTime = null;
         if (!seenFirstLive) {
           skippedBeforeFirstLive++;
         }
@@ -124,6 +154,14 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
       } else {
         seenFirstLive = true;
         liveFound++;
+        if (pendingMapLine) {
+          cleanLines.push(pendingMapLine);
+          pendingMapLine = null;
+        }
+        if (pendingDateTime) {
+          cleanLines.push(pendingDateTime);
+          pendingDateTime = null;
+        }
         cleanLines.push(line);
         if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
           cleanLines.push(lines[i + 1]);
@@ -131,10 +169,6 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
         }
         continue;
       }
-    }
-
-    if (line.startsWith('#EXT-X-DISCONTINUITY') && inCueOut) {
-      continue;
     }
 
     cleanLines.push(line);
@@ -166,7 +200,7 @@ export function createAdBlockPlaylistLoader() {
   const recoveryCache = {
     lastCleanText: '',
     lastCleanTime: 0,
-    liveSegments: []
+    sentBeacons: new Set()
   };
 
   return class AdBlockPlaylistLoader extends Hls.DefaultConfig.loader {

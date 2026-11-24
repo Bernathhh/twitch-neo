@@ -3,8 +3,6 @@
  * Integrates Luminous (TTV LOL PRO) and ReYohoho proxies for 100% ad-free 1440p/1080p playback
  */
 
-import { getStoredToken } from './twitch_auth';
-
 export const PROXY_PROVIDERS = [
   { id: 'proxy4', name: 'ReYohoho Server 4 (Россия - 1440p)', type: 'usher', url: 'https://proxy4.rte.net.ru/' },
   { id: 'proxy7', name: 'ReYohoho Server 7 (1440p)', type: 'usher', url: 'https://proxy7.rte.net.ru/' },

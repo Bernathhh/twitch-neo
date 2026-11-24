@@ -36,16 +36,38 @@ import {
 import { SpatialNavigation } from './navigation/spatial_nav';
 import { TvPlayer, getPreferredQuality, setPreferredQuality } from './player/tv_player';
 
+export function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 class TwitchNativeApp {
   constructor() {
     this.currentView = 'home';
     this.activeCategory = null;
     this.lastFocusedCard = null;
+    this.lastFocusedCategoryCard = null;
+    this.homeLoaded = false;
+    this.browseLoaded = false;
+
+    this._reqIds = {
+      home: 0,
+      following: 0,
+      browse: 0,
+      category: 0,
+      search: 0,
+      ping: 0
+    };
 
     this.nav = new SpatialNavigation();
     this.player = new TvPlayer({
       onClose: () => {
-        if (this.lastFocusedCard && document.body.contains(this.lastFocusedCard)) {
+        if (this.lastFocusedCard && document.body.contains(this.lastFocusedCard) && this.lastFocusedCard.offsetParent !== null) {
           this.nav.focusElement(this.lastFocusedCard);
         } else {
           this.focusFirstInActiveView();
@@ -57,6 +79,11 @@ class TwitchNativeApp {
         } else {
           const firstBtn = document.querySelector('#quality-options-list .dialog-option');
           if (firstBtn) this.nav.focusElement(firstBtn);
+        }
+      },
+      onCloseDialog: (targetEl) => {
+        if (targetEl && document.body.contains(targetEl)) {
+          this.nav.focusElement(targetEl);
         }
       }
     });
@@ -123,10 +150,23 @@ class TwitchNativeApp {
     this._setupSearch();
     this._setupAuth();
 
-    // Check existing auth
+    // Check existing auth and silently verify token hasn't been revoked
     const token = getStoredToken();
     if (token) {
       this._updateAuthUi(getStoredUser());
+      fetchCurrentUser(token).then(user => {
+        if (user === null) {
+          clearToken();
+          this._updateAuthUi(null);
+        } else {
+          this._updateAuthUi(user);
+        }
+      }).catch(err => {
+        if (err && err.status === 401) {
+          clearToken();
+          this._updateAuthUi(null);
+        }
+      });
     }
 
     // Load initial home view
@@ -171,6 +211,11 @@ class TwitchNativeApp {
       // 2. If in category streams view
       if (this.currentView === 'categoryStreams') {
         this.switchView('browse');
+        if (this.lastFocusedCategoryCard && document.body.contains(this.lastFocusedCategoryCard) && this.lastFocusedCategoryCard.offsetParent !== null) {
+          this.nav.focusElement(this.lastFocusedCategoryCard);
+        } else {
+          this.focusFirstInActiveView();
+        }
         return true;
       }
 
@@ -192,8 +237,16 @@ class TwitchNativeApp {
         }
       }
 
-      // 5. If already on sidebar, exit app or let webOS handle
-      if (window.webOS && window.webOS.platformBack) {
+      // 5. If already on sidebar, exit app cleanly via webOS runtime
+      if (window.webOSSystem && typeof window.webOSSystem.platformBack === 'function') {
+        window.webOSSystem.platformBack();
+        return true;
+      }
+      if (window.PalmSystem && typeof window.PalmSystem.platformBack === 'function') {
+        window.PalmSystem.platformBack();
+        return true;
+      }
+      if (window.webOS && typeof window.webOS.platformBack === 'function') {
         window.webOS.platformBack();
         return true;
       }
@@ -206,23 +259,37 @@ class TwitchNativeApp {
     this.sidebarNavItems.forEach(item => {
       item.addEventListener('click', () => {
         const section = item.dataset.section;
+        this.nav.focusElement(item, false);
         this.switchView(section);
       });
     });
 
     this.authSidebarBtn.addEventListener('click', () => {
+      this.nav.focusElement(this.authSidebarBtn, false);
       this.switchView('auth');
     });
 
     if (this.btnCategoryBack) {
       this.btnCategoryBack.addEventListener('click', () => {
         this.switchView('browse');
+        if (this.lastFocusedCategoryCard && document.body.contains(this.lastFocusedCategoryCard) && this.lastFocusedCategoryCard.offsetParent !== null) {
+          this.nav.focusElement(this.lastFocusedCategoryCard);
+        } else {
+          this.focusFirstInActiveView();
+        }
       });
     }
   }
 
   switchView(viewName) {
-    if (this.currentView === viewName && viewName !== 'categoryStreams') return;
+    // Allow re-clicking active tab to refresh feeds
+    if (this.currentView === viewName && viewName !== 'categoryStreams') {
+      if (viewName === 'home') this.loadHome();
+      else if (viewName === 'following') this.loadFollowing();
+      else if (viewName === 'browse') this.loadBrowse();
+      else if (viewName === 'settings') this.loadSettings();
+      return;
+    }
 
     // Stop auth polling if leaving auth view
     if (this.currentView === 'auth') {
@@ -230,6 +297,11 @@ class TwitchNativeApp {
     }
 
     this.currentView = viewName;
+
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) {
+      mainContent.scrollTop = 0;
+    }
 
     // Update active view classes
     Object.keys(this.views).forEach(key => {
@@ -260,7 +332,7 @@ class TwitchNativeApp {
     // Load view data
     switch (viewName) {
       case 'home':
-        if (this.homeStreamGrid.children.length === 0) {
+        if (!this.homeLoaded) {
           this.loadHome();
         }
         break;
@@ -268,7 +340,7 @@ class TwitchNativeApp {
         this.loadFollowing();
         break;
       case 'browse':
-        if (this.browseGrid.children.length === 0) {
+        if (!this.browseLoaded) {
           this.loadBrowse();
         }
         break;
@@ -299,15 +371,35 @@ class TwitchNativeApp {
   /**
    * Home View
    */
+  _renderRetryError(container, message, onRetry) {
+    container.innerHTML = '';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'empty-desc';
+    wrapper.textContent = message;
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn-retry nav-focusable';
+    retryBtn.textContent = 'Повторить';
+    retryBtn.addEventListener('click', onRetry);
+
+    container.appendChild(wrapper);
+    container.appendChild(document.createElement('br'));
+    container.appendChild(retryBtn);
+  }
+
   async loadHome() {
+    const reqId = ++this._reqIds.home;
     this.homeStreamGrid.innerHTML = '<div class="empty-desc">Загрузка популярных стримов...</div>';
     try {
       const streams = await fetchTopStreams(28);
+      if (reqId !== this._reqIds.home) return;
+
       if (streams.length === 0) {
         this.homeStreamGrid.innerHTML = '<div class="empty-desc">Стримы не найдены</div>';
         return;
       }
 
+      this.homeLoaded = true;
       // Hero banner (Top #1 stream)
       const hero = streams[0];
       this._renderHero(hero);
@@ -316,8 +408,9 @@ class TwitchNativeApp {
       const rest = streams.slice(1);
       this._renderStreamGrid(rest, this.homeStreamGrid);
     } catch (err) {
+      if (reqId !== this._reqIds.home) return;
       console.error('[App] Failed to load top streams:', err);
-      this.homeStreamGrid.innerHTML = `<div class="empty-desc">Ошибка загрузки: ${err.message}</div>`;
+      this._renderRetryError(this.homeStreamGrid, `Ошибка загрузки: ${err.message}`, () => this.loadHome());
     }
   }
 
@@ -326,20 +419,26 @@ class TwitchNativeApp {
     const heroCard = document.createElement('div');
     heroCard.className = 'hero-card';
 
+    const previewSrc = escapeHtml((stream.previewUrl || '').replace('440x248', '1920x1080'));
+    const safeTitle = escapeHtml(stream.title);
+    const safeAvatar = escapeHtml(stream.userAvatar || '');
+    const safeName = escapeHtml(stream.userName);
+    const safeGame = escapeHtml(stream.gameName);
+
     heroCard.innerHTML = `
-      <img class="hero-backdrop" src="${stream.previewUrl.replace('440x248', '1920x1080')}" alt="">
+      <img class="hero-backdrop" src="${previewSrc}" alt="">
       <div class="hero-gradient-overlay"></div>
       <div class="hero-info">
         <div class="hero-badge-row">
           <span class="live-pill">В ЭФИРЕ</span>
-          <span class="hero-viewers">${stream.viewers.toLocaleString('ru-RU')} зрителей</span>
+          <span class="hero-viewers">${(stream.viewers || 0).toLocaleString('ru-RU')} зрителей</span>
         </div>
-        <h1 class="hero-title">${stream.title}</h1>
+        <h1 class="hero-title">${safeTitle}</h1>
         <div class="hero-streamer-row">
-          <img class="hero-avatar" src="${stream.userAvatar}" alt="${stream.userName}">
+          <img class="hero-avatar" src="${safeAvatar}" alt="${safeName}">
           <div>
-            <div class="hero-streamer-name">${stream.userName}</div>
-            <div class="hero-game-name">${stream.gameName}</div>
+            <div class="hero-streamer-name">${safeName}</div>
+            <div class="hero-game-name">${safeGame}</div>
           </div>
         </div>
         <button id="hero-watch-btn" class="hero-play-btn nav-focusable">
@@ -365,18 +464,26 @@ class TwitchNativeApp {
     streams.forEach(stream => {
       const card = document.createElement('button');
       card.className = 'stream-card nav-focusable';
+      const isOffline = stream.isLive === false;
+      const badgeHtml = isOffline
+        ? '<span class="offline-pill badge-top-left">OFFLINE</span>'
+        : '<span class="live-pill badge-top-left">LIVE</span>';
+      const viewersHtml = isOffline
+        ? ''
+        : `<span class="badge-bottom-left">${(stream.viewers || 0).toLocaleString('ru-RU')} зрит.</span>`;
+
       card.innerHTML = `
         <div class="card-thumb-container">
-          <img class="card-thumb" src="${stream.previewUrl}" alt="" loading="lazy" decoding="async">
-          <span class="live-pill badge-top-left">LIVE</span>
-          <span class="badge-bottom-left">${stream.viewers.toLocaleString('ru-RU')} зрит.</span>
+          <img class="card-thumb" src="${escapeHtml(stream.previewUrl || '')}" alt="" loading="lazy" decoding="async">
+          ${badgeHtml}
+          ${viewersHtml}
         </div>
         <div class="card-meta">
-          <img class="card-avatar" src="${stream.userAvatar}" alt="" loading="lazy" decoding="async">
+          <img class="card-avatar" src="${escapeHtml(stream.userAvatar || '')}" alt="" loading="lazy" decoding="async">
           <div class="card-details">
-            <h3 class="card-title">${stream.title}</h3>
-            <span class="card-author">${stream.userName}</span>
-            <span class="card-game">${stream.gameName}</span>
+            <h3 class="card-title">${escapeHtml(stream.title)}</h3>
+            <span class="card-author">${escapeHtml(stream.userName)}</span>
+            <span class="card-game">${escapeHtml(stream.gameName)}</span>
           </div>
         </div>
       `;
@@ -396,6 +503,7 @@ class TwitchNativeApp {
    * Following View
    */
   async loadFollowing() {
+    const reqId = ++this._reqIds.following;
     const token = getStoredToken();
     if (!token) {
       this.followingGrid.innerHTML = '';
@@ -407,7 +515,9 @@ class TwitchNativeApp {
     this.followingGrid.innerHTML = '<div class="empty-desc">Загрузка отслеживаемых стримов...</div>';
 
     try {
-      const streams = await fetchFollowedStreams(token, 30);
+      const streams = await fetchFollowedStreams(token, 60);
+      if (reqId !== this._reqIds.following) return;
+
       if (streams.length === 0) {
         this.followingGrid.innerHTML = '';
         this.followingEmpty.classList.remove('hidden');
@@ -415,8 +525,16 @@ class TwitchNativeApp {
       }
       this._renderStreamGrid(streams, this.followingGrid);
     } catch (err) {
+      if (reqId !== this._reqIds.following) return;
       console.error('[App] Failed to load followed streams:', err);
-      this.followingGrid.innerHTML = `<div class="empty-desc">Ошибка загрузки: ${err.message}</div>`;
+      if (err && err.status === 401) {
+        clearToken();
+        this._updateAuthUi(null);
+        this.followingGrid.innerHTML = '';
+        this.followingEmpty.classList.remove('hidden');
+        return;
+      }
+      this._renderRetryError(this.followingGrid, `Ошибка загрузки: ${err.message}`, () => this.loadFollowing());
     }
   }
 
@@ -424,24 +542,30 @@ class TwitchNativeApp {
    * Browse View
    */
   async loadBrowse() {
+    const reqId = ++this._reqIds.browse;
     this.browseGrid.innerHTML = '<div class="empty-desc">Загрузка категорий...</div>';
     try {
       const games = await fetchTopGames(30);
+      if (reqId !== this._reqIds.browse) return;
+
       this.browseGrid.innerHTML = '';
       const fragment = document.createDocumentFragment();
 
       games.forEach(game => {
         const card = document.createElement('button');
         card.className = 'game-card nav-focusable';
+        const safeName = escapeHtml(game.name);
+        const safeDisplay = escapeHtml(game.displayName || game.name);
         card.innerHTML = `
           <div class="game-thumb-container">
-            <img class="game-thumb" src="${game.boxArtUrl}" alt="${game.name}" loading="lazy" decoding="async">
+            <img class="game-thumb" src="${escapeHtml(game.boxArtUrl || '')}" alt="${safeName}" loading="lazy" decoding="async">
           </div>
-          <div class="game-name">${game.displayName || game.name}</div>
+          <div class="game-name">${safeDisplay}</div>
           <div class="game-viewers">${game.viewers ? game.viewers.toLocaleString('ru-RU') + ' зрителей' : ''}</div>
         `;
 
         card.addEventListener('click', () => {
+          this.lastFocusedCategoryCard = card;
           this.openCategory(game);
         });
 
@@ -449,13 +573,16 @@ class TwitchNativeApp {
       });
 
       this.browseGrid.appendChild(fragment);
+      this.browseLoaded = games.length > 0;
     } catch (err) {
+      if (reqId !== this._reqIds.browse) return;
       console.error('[App] Failed to load games:', err);
-      this.browseGrid.innerHTML = `<div class="empty-desc">Ошибка: ${err.message}</div>`;
+      this._renderRetryError(this.browseGrid, `Ошибка загрузки категорий: ${err.message}`, () => this.loadBrowse());
     }
   }
 
   async openCategory(game) {
+    const reqId = ++this._reqIds.category;
     this.activeCategory = game;
     this.categoryTitleEl.textContent = game.displayName || game.name;
     this.switchView('categoryStreams');
@@ -463,14 +590,17 @@ class TwitchNativeApp {
 
     try {
       const streams = await fetchGameStreams(game.name, 30);
+      if (reqId !== this._reqIds.category) return;
+
       if (streams.length === 0) {
         this.categoryStreamGrid.innerHTML = '<div class="empty-desc">Нет активных прямых эфиров в этой категории</div>';
         return;
       }
       this._renderStreamGrid(streams, this.categoryStreamGrid);
     } catch (err) {
+      if (reqId !== this._reqIds.category) return;
       console.error('[App] Failed to load category streams:', err);
-      this.categoryStreamGrid.innerHTML = `<div class="empty-desc">Ошибка: ${err.message}</div>`;
+      this._renderRetryError(this.categoryStreamGrid, `Ошибка загрузки: ${err.message}`, () => this.openCategory(game));
     }
   }
 
@@ -483,6 +613,7 @@ class TwitchNativeApp {
       clearTimeout(debounceTimer);
       const q = e.target.value.trim();
       if (!q) {
+        this._reqIds.search++;
         this.searchResultsGrid.innerHTML = '';
         return;
       }
@@ -492,7 +623,7 @@ class TwitchNativeApp {
     });
 
     this.searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' || (e.keyCode || e.which) === 13) {
         clearTimeout(debounceTimer);
         const q = this.searchInput.value.trim();
         if (q) this.executeSearch(q);
@@ -501,17 +632,21 @@ class TwitchNativeApp {
   }
 
   async executeSearch(query) {
+    const reqId = ++this._reqIds.search;
     this.searchResultsGrid.innerHTML = '<div class="empty-desc">Поиск...</div>';
     try {
       const results = await searchChannels(query);
+      if (reqId !== this._reqIds.search) return;
+
       if (results.length === 0) {
         this.searchResultsGrid.innerHTML = '<div class="empty-desc">Ничего не найдено</div>';
         return;
       }
       this._renderStreamGrid(results, this.searchResultsGrid);
     } catch (err) {
+      if (reqId !== this._reqIds.search) return;
       console.error('[App] Search error:', err);
-      this.searchResultsGrid.innerHTML = `<div class="empty-desc">Ошибка поиска: ${err.message}</div>`;
+      this.searchResultsGrid.innerHTML = `<div class="empty-desc">Ошибка поиска: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -529,13 +664,15 @@ class TwitchNativeApp {
       btn.textContent = srv.id.toUpperCase();
       btn.addEventListener('click', () => {
         setCurrentProxyServer(srv.url);
-        this._setupSettings();
+        this.proxySelectorContainer.querySelectorAll('.selector-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.nav.focusElement(btn, false);
         this._testProxyStatus(srv.url);
       });
       this.proxySelectorContainer.appendChild(btn);
     });
 
-    // 2. Default Quality selector (Максимум 1440p / 1080p / 720p / Авто)
+    // 2. Default Quality selector (1440p / 1080p / 720p / Авто)
     if (this.defaultQualityContainer) {
       this.defaultQualityContainer.innerHTML = '';
       const currentPref = getPreferredQuality();
@@ -552,7 +689,9 @@ class TwitchNativeApp {
         btn.textContent = opt.label;
         btn.addEventListener('click', () => {
           setPreferredQuality(opt.id);
-          this._setupSettings();
+          this.defaultQualityContainer.querySelectorAll('.selector-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.nav.focusElement(btn, false);
         });
         this.defaultQualityContainer.appendChild(btn);
       });
@@ -564,10 +703,13 @@ class TwitchNativeApp {
   }
 
   async _testProxyStatus(serverUrl) {
+    const reqId = ++this._reqIds.ping;
     this.proxyStatusIndicator.textContent = 'Проверка соединения...';
     this.proxyStatusIndicator.style.color = 'var(--text-secondary)';
 
     const res = await testProxyPing(serverUrl);
+    if (reqId !== this._reqIds.ping) return;
+
     if (res.ok) {
       this.proxyStatusIndicator.textContent = `В сети (${res.ms} мс)`;
       this.proxyStatusIndicator.style.color = '#00f59b';
@@ -585,6 +727,9 @@ class TwitchNativeApp {
       clearToken();
       this._updateAuthUi(null);
       this.loadAuth();
+      if (this.authSidebarBtn) {
+        this.nav.focusElement(this.authSidebarBtn, false);
+      }
     });
   }
 
@@ -595,7 +740,7 @@ class TwitchNativeApp {
 
       const placeholder = this.authSidebarBtn.querySelector('.auth-avatar-placeholder');
       if (placeholder) {
-        placeholder.innerHTML = `<img class="auth-user-avatar-mini" src="${user.profileImageURL}" alt="">`;
+        placeholder.innerHTML = `<img class="auth-user-avatar-mini" src="${escapeHtml(user.profileImageURL || '')}" alt="">`;
       }
     } else {
       const authLabel = this.authSidebarBtn.querySelector('.auth-label');

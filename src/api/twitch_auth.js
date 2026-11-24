@@ -13,6 +13,7 @@ const STORAGE_KEY_TOKEN = 'twitch_native_token';
 const STORAGE_KEY_USER = 'twitch_native_user';
 
 let currentPollTimer = null;
+let activeFlowId = 0;
 
 export function getStoredToken() {
   try {
@@ -83,6 +84,7 @@ export async function requestDeviceCode() {
  * Stop active polling
  */
 export function stopPolling() {
+  activeFlowId++;
   if (currentPollTimer) {
     clearTimeout(currentPollTimer);
     currentPollTimer = null;
@@ -94,9 +96,12 @@ export function stopPolling() {
  */
 export async function startDeviceFlow(onCodeReceived, onAuthenticated, onError) {
   stopPolling();
+  const flowId = activeFlowId;
 
   try {
     const data = await requestDeviceCode();
+    if (flowId !== activeFlowId) return;
+
     const { device_code, user_code, verification_uri, expires_in, interval } = data;
 
     if (onCodeReceived) {
@@ -110,6 +115,8 @@ export async function startDeviceFlow(onCodeReceived, onAuthenticated, onError) 
     const expiresAt = Date.now() + (expires_in || 1800) * 1000;
 
     const poll = async () => {
+      if (flowId !== activeFlowId) return;
+
       if (Date.now() >= expiresAt) {
         if (onError) onError(new Error('Срок действия кода истек. Попробуйте снова.'));
         return;
@@ -129,13 +136,15 @@ export async function startDeviceFlow(onCodeReceived, onAuthenticated, onError) 
           body: body.toString()
         });
 
+        if (flowId !== activeFlowId) return;
+
         if (tokenRes.ok) {
           const tokenData = await tokenRes.json();
           const accessToken = tokenData.access_token;
           if (accessToken) {
             saveToken(accessToken);
-            // Fetch profile
-            const profile = await fetchCurrentUser(accessToken);
+            const profile = await fetchCurrentUser(accessToken).catch(() => null);
+            if (flowId !== activeFlowId) return;
             if (profile) {
               saveUser(profile);
             }
@@ -146,20 +155,24 @@ export async function startDeviceFlow(onCodeReceived, onAuthenticated, onError) 
           }
         } else {
           const errData = await tokenRes.json().catch(() => ({}));
-          if (errData.message === 'authorization_pending') {
-            // User hasn't entered code yet, keep polling
+          const msg = errData.message || '';
+          if (msg === 'authorization_pending') {
             currentPollTimer = setTimeout(poll, pollInterval);
             return;
-          } else if (errData.message === 'slow_down') {
+          } else if (msg === 'slow_down') {
             currentPollTimer = setTimeout(poll, pollInterval + 5000);
             return;
+          } else if (msg === 'invalid device code' || msg === 'expired_token' || msg === 'authorization_declined' || msg === 'access_denied') {
+            if (onError) onError(new Error(msg));
+            return;
           } else {
-            console.log('[Auth] Polling status:', errData.message);
+            console.log('[Auth] Polling status:', msg);
             currentPollTimer = setTimeout(poll, pollInterval);
             return;
           }
         }
       } catch (err) {
+        if (flowId !== activeFlowId) return;
         console.warn('[Auth] Polling error:', err);
         currentPollTimer = setTimeout(poll, pollInterval);
       }
@@ -167,6 +180,6 @@ export async function startDeviceFlow(onCodeReceived, onAuthenticated, onError) 
 
     currentPollTimer = setTimeout(poll, pollInterval);
   } catch (err) {
-    if (onError) onError(err);
+    if (flowId === activeFlowId && onError) onError(err);
   }
 }

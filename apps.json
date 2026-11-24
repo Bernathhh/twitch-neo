@@ -4,21 +4,21 @@
       "id": "tv.twitch.neo",
       "title": "Twitch Neo",
       "iconUri": "https://raw.githubusercontent.com/Bernathhh/twitch-neo/main/assets/largeIcon.png",
-      "manifestUrl": "https://github.com/Bernathhh/twitch-neo/releases/download/v1.0.16/twitch.neo.manifest.json",
+      "manifestUrl": "https://github.com/Bernathhh/twitch-neo/releases/download/v1.0.17/twitch.neo.manifest.json",
       "manifest": {
         "id": "tv.twitch.neo",
-        "version": "1.0.16",
+        "version": "1.0.17",
         "type": "web",
         "title": "Twitch Neo",
         "appDescription": "Next-generation lightweight Twitch client for LG webOS TVs with 1440p60 and ad-free playback",
         "iconUri": "https://raw.githubusercontent.com/Bernathhh/twitch-neo/main/assets/largeIcon.png",
         "sourceUrl": "https://github.com/Bernathhh/twitch-neo",
         "rootRequired": false,
-        "ipkUrl": "https://github.com/Bernathhh/twitch-neo/releases/download/v1.0.16/tv.twitch.neo_1.0.16_all.ipk",
+        "ipkUrl": "https://github.com/Bernathhh/twitch-neo/releases/download/v1.0.17/tv.twitch.neo_1.0.17_all.ipk",
         "ipkHash": {
-          "sha256": "e5495d851c2bf6d6751f6bbfd8c2b6395be6989ebebc334b9b293a680ee70a9f"
+          "sha256": "4a21339dd11fe606c93c405c0d6aa57185c968e2195e24d2df6d1eecede03292"
         },
-        "ipkSize": 399130
+        "ipkSize": 402544
       },
       "pool": "main",
       "screenshots": [

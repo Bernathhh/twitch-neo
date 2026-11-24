@@ -26,7 +26,9 @@ export async function postGql(query, variables = {}, token = null) {
   });
 
   if (!response.ok) {
-    throw new Error(`Twitch GQL HTTP Error: ${response.status} ${response.statusText}`);
+    const err = new Error(`Twitch GQL HTTP Error: ${response.status} ${response.statusText}`);
+    err.status = response.status;
+    throw err;
   }
 
   const result = await response.json();
@@ -77,17 +79,20 @@ export async function fetchTopStreams(limit = 30) {
   const data = await postGql(query, { limit });
   if (!data?.streams?.edges) return [];
 
-  return data.streams.edges.map(edge => ({
-    id: edge.node.id,
-    title: edge.node.title || edge.node.broadcaster?.broadcastSettings?.title || 'Без названия',
-    viewers: edge.node.viewersCount || 0,
-    previewUrl: edge.node.previewImageURL,
-    userLogin: edge.node.broadcaster.login,
-    userName: edge.node.broadcaster.displayName,
-    userAvatar: edge.node.broadcaster.profileImageURL,
-    gameName: edge.node.game?.name || edge.node.broadcaster?.broadcastSettings?.game?.name || 'Без категории',
-    gameBoxArt: edge.node.game?.boxArtURL || ''
-  }));
+  return data.streams.edges
+    .filter(edge => edge.node?.broadcaster)
+    .map(edge => ({
+      id: edge.node.id,
+      title: edge.node.title || edge.node.broadcaster?.broadcastSettings?.title || 'Без названия',
+      viewers: edge.node.viewersCount || 0,
+      previewUrl: edge.node.previewImageURL || '',
+      userLogin: edge.node.broadcaster.login,
+      userName: edge.node.broadcaster.displayName || edge.node.broadcaster.login,
+      userAvatar: edge.node.broadcaster.profileImageURL || '',
+      gameName: edge.node.game?.name || edge.node.broadcaster?.broadcastSettings?.game?.name || 'Без категории',
+      gameBoxArt: edge.node.game?.boxArtURL || '',
+      isLive: true
+    }));
 }
 
 /**
@@ -156,17 +161,20 @@ export async function fetchGameStreams(gameName, limit = 30) {
   const data = await postGql(query, { gameName, limit });
   if (!data?.game?.streams?.edges) return [];
 
-  return data.game.streams.edges.map(edge => ({
-    id: edge.node.id,
-    title: edge.node.title || 'Без названия',
-    viewers: edge.node.viewersCount || 0,
-    previewUrl: edge.node.previewImageURL,
-    userLogin: edge.node.broadcaster.login,
-    userName: edge.node.broadcaster.displayName,
-    userAvatar: edge.node.broadcaster.profileImageURL,
-    gameName: data.game.displayName || data.game.name,
-    gameBoxArt: data.game.boxArtURL
-  }));
+  return data.game.streams.edges
+    .filter(edge => edge.node?.broadcaster)
+    .map(edge => ({
+      id: edge.node.id,
+      title: edge.node.title || 'Без названия',
+      viewers: edge.node.viewersCount || 0,
+      previewUrl: edge.node.previewImageURL || '',
+      userLogin: edge.node.broadcaster.login,
+      userName: edge.node.broadcaster.displayName || edge.node.broadcaster.login,
+      userAvatar: edge.node.broadcaster.profileImageURL || '',
+      gameName: data.game.displayName || data.game.name || '',
+      gameBoxArt: data.game.boxArtURL || '',
+      isLive: true
+    }));
 }
 
 /**
@@ -213,15 +221,16 @@ export async function searchChannels(userQuery) {
       return {
         id: user.stream?.id || user.id,
         userLogin: user.login,
-        userName: user.displayName,
-        userAvatar: user.profileImageURL,
+        userName: user.displayName || user.login,
+        userAvatar: user.profileImageURL || '',
         isLive,
         title: user.stream?.title || (isLive ? 'Прямой эфир' : 'Не в сети'),
         viewers: user.stream?.viewersCount || 0,
-        previewUrl: user.stream?.previewImageURL || user.profileImageURL,
+        previewUrl: user.stream?.previewImageURL || user.profileImageURL || '',
         gameName: user.stream?.game?.name || ''
       };
-    });
+    })
+    .sort((a, b) => Number(b.isLive) - Number(a.isLive));
 }
 
 /**
@@ -342,11 +351,12 @@ export async function fetchFollowedStreams(token, limit = 30) {
         id: u.stream.id,
         title: u.stream.title || 'Прямой эфир',
         viewers: u.stream.viewersCount || 0,
-        previewUrl: u.stream.previewImageURL,
+        previewUrl: u.stream.previewImageURL || '',
         userLogin: u.login,
-        userName: u.displayName,
-        userAvatar: u.profileImageURL,
-        gameName: u.stream.game?.name || u.stream.game?.displayName || 'Без категории'
+        userName: u.displayName || u.login,
+        userAvatar: u.profileImageURL || '',
+        gameName: u.stream.game?.name || u.stream.game?.displayName || 'Без категории',
+        isLive: true
       };
     });
 }

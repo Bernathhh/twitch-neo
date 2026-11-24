@@ -38,6 +38,7 @@ export class TvPlayer {
     this.osdEl = document.getElementById('player-osd');
     this.spinnerEl = document.getElementById('player-spinner');
     this.qualityModalEl = document.getElementById('quality-modal');
+    this.qualityBackdropEl = document.getElementById('quality-backdrop');
     this.qualityDialogEl = document.getElementById('quality-dialog');
     this.qualityOptionsEl = document.getElementById('quality-options-list');
     this.statsOverlayEl = document.getElementById('stats-overlay');
@@ -73,9 +74,19 @@ export class TvPlayer {
     this.qualityToastEl = document.getElementById('quality-toast');
     this.qualityToastValueEl = document.getElementById('quality-toast-value');
     this.toastTimeout = null;
+    this.toastHideTimeout = null;
     this.waitingTimeout = null;
+    this.restartTimeout = null;
     this.lastPlayheadTime = -1;
     this.lastPlayheadAdvance = 0;
+    this.lastShownToastLabel = '';
+
+    this.playSessionId = 0;
+    this.mediaRecoveryAttempts = 0;
+    this.lastMediaRecoveryTime = 0;
+    this.networkErrorAttempts = 0;
+    this.lastNetworkErrorTime = 0;
+    this.fallbackAttempt = 0;
 
     this.currentChannel = null;
     this.currentStreamData = null;
@@ -103,6 +114,9 @@ export class TvPlayer {
     this.btnReload.addEventListener('click', () => this.reload());
     this.btnStats.addEventListener('click', () => this.toggleStats());
     this.btnClose.addEventListener('click', () => this.close());
+    if (this.qualityBackdropEl) {
+      this.qualityBackdropEl.addEventListener('click', () => this.closeQualityDialog());
+    }
 
     const hideSpinnerNow = () => {
       clearTimeout(this.waitingTimeout);
@@ -116,13 +130,15 @@ export class TvPlayer {
       this.iconPlay.classList.add('hidden');
       this.iconPause.classList.remove('hidden');
 
-      // Trigger corner quality notification on stream playback
-      if (this.hls && this.hls.currentLevel >= 0 && this.hls.levels[this.hls.currentLevel]) {
-        const lvl = this.hls.levels[this.hls.currentLevel];
-        const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : '';
-        const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
-        if (res) {
-          this.showQualityToast(`${res}${isHevc ? ' [HEVC]' : ''}`);
+      // Show toast on first playback if not already shown for active level
+      if (this.hls) {
+        const lvlIdx = this.hls.currentLevel >= 0 ? this.hls.currentLevel : this.hls.loadLevel;
+        const lvl = lvlIdx >= 0 ? this.hls.levels[lvlIdx] : null;
+        if (lvl) {
+          const fullLabel = this._formatLevelToast(lvl);
+          if (fullLabel && this.lastShownToastLabel !== fullLabel) {
+            this.showQualityToast(fullLabel);
+          }
         }
       }
     });
@@ -169,6 +185,23 @@ export class TvPlayer {
     });
   }
 
+  _formatLevelRes(lvl) {
+    if (!lvl) return 'Auto';
+    if (!lvl.height && (lvl.name === 'audio_only' || (!lvl.videoCodec && lvl.audioCodec) || (lvl.bitrate && lvl.bitrate <= 200000))) {
+      return 'Аудио';
+    }
+    return lvl.height
+      ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}`
+      : (lvl.name || 'Custom');
+  }
+
+  _formatLevelToast(lvl) {
+    if (!lvl) return '';
+    const res = this._formatLevelRes(lvl);
+    const isHevc = isHevcCodec(lvl.videoCodec || lvl.codecs) || (lvl.height && lvl.height >= 1440);
+    return `${res}${isHevc ? ' [HEVC]' : ''}`;
+  }
+
   showSpinner() {
     this.spinnerEl.classList.remove('hidden');
   }
@@ -179,6 +212,7 @@ export class TvPlayer {
   }
 
   showOsd() {
+    if (!this.isOpen()) return;
     this.osdEl.classList.remove('hidden');
     this.osdEl.classList.add('visible');
     clearTimeout(this.osdTimeout);
@@ -191,6 +225,7 @@ export class TvPlayer {
 
   hideOsd() {
     if (this.isQualityDialogVisible) return;
+    clearTimeout(this.osdTimeout);
     this.osdEl.classList.remove('visible');
     this.osdEl.classList.add('hidden');
   }
@@ -199,20 +234,24 @@ export class TvPlayer {
     if (!this.qualityToastEl || !this.qualityToastValueEl) return;
     if (!label || label === '-' || label === 'Auto') return;
 
+    this.lastShownToastLabel = label;
+
     let formatted = label;
     if (formatted.includes('[HEVC]')) {
       formatted = formatted.replace('[HEVC]', '<span class="hevc-badge">HEVC</span>');
     }
 
+    clearTimeout(this.toastTimeout);
+    clearTimeout(this.toastHideTimeout);
+
     this.qualityToastValueEl.innerHTML = formatted;
     this.qualityToastEl.classList.remove('hidden');
     this.qualityToastEl.classList.remove('toast-hide');
 
-    clearTimeout(this.toastTimeout);
     this.toastTimeout = setTimeout(() => {
       if (this.qualityToastEl) {
         this.qualityToastEl.classList.add('toast-hide');
-        setTimeout(() => {
+        this.toastHideTimeout = setTimeout(() => {
           if (this.qualityToastEl && this.qualityToastEl.classList.contains('toast-hide')) {
             this.qualityToastEl.classList.add('hidden');
           }
@@ -231,6 +270,9 @@ export class TvPlayer {
 
   togglePlayPause() {
     if (this.videoEl.paused) {
+      if (this.hls && this.videoEl.buffered.length === 0) {
+        this.hls.startLoad(-1);
+      }
       this.videoEl.play().catch(() => {});
     } else {
       this.videoEl.pause();
@@ -270,13 +312,22 @@ export class TvPlayer {
 
     if (this.videoEl.videoWidth) {
       this.statRes.textContent = `${this.videoEl.videoWidth}x${this.videoEl.videoHeight}`;
+    } else {
+      this.statRes.textContent = '-';
     }
 
-    if (this.hls && this.hls.currentLevel >= 0 && this.hls.levels[this.hls.currentLevel]) {
-      const level = this.hls.levels[this.hls.currentLevel];
-      this.statFps.textContent = level.frameRate ? `${Math.round(level.frameRate)} fps` : '60 fps';
+    const lvlIdx = this.hls
+      ? (this.hls.currentLevel >= 0 ? this.hls.currentLevel : this.hls.loadLevel)
+      : -1;
+    if (this.hls && lvlIdx >= 0 && this.hls.levels[lvlIdx]) {
+      const level = this.hls.levels[lvlIdx];
+      this.statFps.textContent = level.frameRate ? `${Math.round(level.frameRate)} fps` : '-';
       this.statBitrate.textContent = level.bitrate ? `${(level.bitrate / 1000000).toFixed(1)} Mbps` : '-';
-      this.statCodec.textContent = level.videoCodec || level.codecs || 'HEVC (hvc1)';
+      this.statCodec.textContent = level.videoCodec || level.codecs || (level.height >= 1440 ? 'HEVC' : 'AVC');
+    } else {
+      this.statFps.textContent = '-';
+      this.statBitrate.textContent = '-';
+      this.statCodec.textContent = '-';
     }
 
     // Buffer length
@@ -308,7 +359,9 @@ export class TvPlayer {
       this.statDropped.textContent = `${q.droppedVideoFrames} / ${q.totalVideoFrames}`;
     }
 
-    this.statProxy.textContent = this.lastUsedProxy ? this.lastUsedProxy.replace('https://', '').replace('/', '') : 'ReYohoho';
+    this.statProxy.textContent = this.lastUsedProxy
+      ? this.lastUsedProxy.replace(/^https?:\/\//, '').split('/')[0]
+      : 'ReYohoho';
   }
 
   /**
@@ -325,24 +378,22 @@ export class TvPlayer {
         return;
       }
 
-      // If network is loading actively and buffer is empty, let it buffer naturally
-      if (this.videoEl.readyState < 3 && this.videoEl.networkState === 2) {
-        return;
-      }
-
       const cur = this.videoEl.currentTime;
       if (cur > 0 && Math.abs(cur - lastTime) < 0.04) {
         stallSeconds++;
 
-        // At 4 seconds: attempt gentle play without mutating currentTime (never do currentTime += 0.1 on webOS!)
-        if (stallSeconds === 4) {
-          console.warn('[TvPlayer] Watchdog detected stall, gentle play kick...');
+        // At 5 seconds: attempt gentle play + reload check without mutating currentTime
+        if (stallSeconds === 5) {
+          console.warn('[TvPlayer] Watchdog detected stall, gentle recovery kick...');
+          if (this.hls && this.videoEl.readyState < 3) {
+            this.hls.startLoad();
+          }
           this.videoEl.play().catch(() => {});
         }
 
-        // At 8 seconds on 1440p60: decoder lock detected, auto-fallback to stable 1080p60
-        if (stallSeconds >= 8) {
-          console.warn('[TvPlayer] Unrecoverable stall on current level. Resetting to stable 1080p60...');
+        // At 10 seconds: unrecoverable stall or decoder lock -> step down to stable quality
+        if (stallSeconds >= 10) {
+          console.warn('[TvPlayer] Unrecoverable stall on current level. Falling back to lower quality...');
           stallSeconds = 0;
           lastTime = -1;
           this._fallbackToStableQuality();
@@ -354,33 +405,63 @@ export class TvPlayer {
     }, 1000);
   }
 
+  _pickBestLevelForHeight(levels, targetHeight, exact = false) {
+    let bestIdx = -1;
+    let bestH = 0;
+    let bestFps = 0;
+    let bestBitrate = 0;
+
+    for (let i = 0; i < levels.length; i++) {
+      const lvl = levels[i];
+      const h = lvl.height || 0;
+      if (h === 0) continue; // ignore audio-only
+      if (exact ? h !== targetHeight : h > targetHeight) continue;
+
+      const fps = lvl.frameRate || 0;
+      const b = lvl.bitrate || 0;
+      if (h > bestH || (h === bestH && (fps > bestFps || (fps === bestFps && b > bestBitrate)))) {
+        bestH = h;
+        bestFps = fps;
+        bestBitrate = b;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
   _fallbackToStableQuality() {
     if (!this.hls || !this.hls.levels || this.hls.levels.length === 0) return;
 
-    // Find highest stable AVC level (preferably 1080p60, then 720p60) - never 160p
-    let targetIdx = -1;
-    let bestHeight = 0;
-    for (let i = 0; i < this.hls.levels.length; i++) {
-      const lvl = this.hls.levels[i];
-      const h = lvl.height || 0;
-      if (h <= 1080 && h > bestHeight) {
-        bestHeight = h;
-        targetIdx = i;
-      }
+    const activeIdx = this.currentSelectedLevel >= 0
+      ? this.currentSelectedLevel
+      : (this.hls.currentLevel >= 0 ? this.hls.currentLevel : this.hls.loadLevel);
+    const activeHeight = activeIdx >= 0 && this.hls.levels[activeIdx] ? (this.hls.levels[activeIdx].height || 9999) : 9999;
+
+    // Pick highest stable AVC level strictly below current failing height (1440 -> 1080 -> 720 -> 480)
+    const ceiling = activeHeight > 1080 ? 1080 : (activeHeight > 720 ? 720 : 480);
+    let targetIdx = this._pickBestLevelForHeight(this.hls.levels, ceiling, false);
+
+    if (targetIdx === -1 || targetIdx === activeIdx) {
+      targetIdx = this._pickBestLevelForHeight(this.hls.levels, 1080, false);
     }
 
-    if (targetIdx !== -1 && targetIdx !== this.currentSelectedLevel) {
-      const label = `${bestHeight}p60 (Auto-Stable)`;
-      this.qualityLabelEl.textContent = label;
-      this._selectQualityLevel(targetIdx, label);
-    } else {
+    if (targetIdx !== -1 && targetIdx !== activeIdx && this.fallbackAttempt < 2) {
+      this.fallbackAttempt++;
+      const resLabel = this._formatLevelRes(this.hls.levels[targetIdx]);
+      this._selectQualityLevel(targetIdx, resLabel);
+    } else if (this.fallbackAttempt < 3) {
+      this.fallbackAttempt++;
       this.reload();
+    } else {
+      this.hideSpinner();
+      this.streamTitleEl.textContent = 'Ошибка декодирования видеопотока. Нажмите «Обновить» для повтора.';
+      this.showOsd();
     }
   }
 
   toggleQualityDialog() {
     if (this.isQualityDialogVisible) {
-      this.closeQualityDialog();
+      this.closeQualityDialog(true);
     } else {
       this.openQualityDialog();
     }
@@ -399,7 +480,7 @@ export class TvPlayer {
 
     let activeOptionBtn = null;
 
-    // Specific levels: Highest resolution first (e.g. 1440p60 -> 1080p60 -> 720p60 -> 480p)
+    // Specific levels: Highest resolution first (e.g. 1440p60 -> 1080p60 -> 720p60 -> 480p -> audio)
     const sortedIndices = [...Array(this.hls.levels.length).keys()].sort((a, b) => {
       const lvlA = this.hls.levels[a];
       const lvlB = this.hls.levels[b];
@@ -415,8 +496,8 @@ export class TvPlayer {
       const isSelected = this.currentSelectedLevel === idx;
       optBtn.className = `dialog-option nav-focusable ${isSelected ? 'active' : ''}`;
 
-      const resLabel = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : lvl.name || `Уровень ${idx}`;
-      const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
+      const resLabel = this._formatLevelRes(lvl);
+      const isHevc = isHevcCodec(lvl.videoCodec || lvl.codecs) || (lvl.height && lvl.height >= 1440);
       const tagLabel = isHevc ? ' [HEVC]' : '';
       const bitrateLabel = lvl.bitrate ? ` • ${(lvl.bitrate / 1000000).toFixed(1)} Mbps` : '';
       optBtn.innerHTML = `<span>${resLabel}${tagLabel}${bitrateLabel}</span>${isSelected ? '<span class="opt-check">✓</span>' : ''}`;
@@ -451,35 +532,44 @@ export class TvPlayer {
     }
   }
 
-  closeQualityDialog() {
+  closeQualityDialog(restoreFocus = true) {
     this.isQualityDialogVisible = false;
     if (this.qualityModalEl) {
       this.qualityModalEl.classList.add('hidden');
     }
     this.qualityDialogEl.classList.add('hidden');
-    if (this.btnQuality) {
-      this.btnQuality.focus();
+    this.qualityOptionsEl.innerHTML = '';
+
+    if (restoreFocus && this.isOpen()) {
+      if (this.options.onCloseDialog) {
+        this.options.onCloseDialog(this.btnQuality);
+      } else if (this.btnQuality) {
+        this.btnQuality.focus();
+      }
+      this.showOsd();
     }
-    this.showOsd();
   }
 
   /**
    * Safe quality selection with pipeline reinitialization when crossing codec boundaries (AVC <-> HEVC)
-   * or changing resolutions on LG webOS Starfish GStreamer
+   * on LG webOS Starfish GStreamer
    */
   _selectQualityLevel(idx, resLabel) {
-    this.closeQualityDialog();
+    this.closeQualityDialog(true);
 
     if (this.currentSelectedLevel === idx) {
       return;
     }
 
-    const prevLevel = this.hls && this.currentSelectedLevel >= 0 ? this.hls.levels[this.currentSelectedLevel] : null;
+    const activeIdx = this.currentSelectedLevel >= 0
+      ? this.currentSelectedLevel
+      : (this.hls ? (this.hls.currentLevel >= 0 ? this.hls.currentLevel : this.hls.loadLevel) : -1);
+    const prevLevel = this.hls && activeIdx >= 0 ? this.hls.levels[activeIdx] : null;
     const nextLevel = this.hls && idx >= 0 ? this.hls.levels[idx] : null;
 
     this.currentSelectedLevel = idx;
     this.qualityLabelEl.textContent = resLabel;
-    this.showQualityToast(resLabel);
+    this.showQualityToast(this._formatLevelToast(nextLevel) || resLabel);
 
     if (idx === -1) {
       // Auto
@@ -490,8 +580,8 @@ export class TvPlayer {
     }
 
     // Check if crossing codec boundary (HEVC <-> AVC)
-    const prevIsHevc = prevLevel ? (isHevcCodec(prevLevel.videoCodec) || (prevLevel.height && prevLevel.height >= 1440)) : false;
-    const nextIsHevc = nextLevel ? (isHevcCodec(nextLevel.videoCodec) || (nextLevel.height && nextLevel.height >= 1440)) : false;
+    const prevIsHevc = prevLevel ? (isHevcCodec(prevLevel.videoCodec || prevLevel.codecs) || (prevLevel.height && prevLevel.height >= 1440)) : false;
+    const nextIsHevc = nextLevel ? (isHevcCodec(nextLevel.videoCodec || nextLevel.codecs) || (nextLevel.height && nextLevel.height >= 1440)) : false;
     const isCodecCross = prevLevel && nextLevel && (prevIsHevc !== nextIsHevc);
 
     if (isCodecCross && this.currentBlobUrl) {
@@ -506,6 +596,9 @@ export class TvPlayer {
   }
 
   _cleanPipelineRestart(blobUrl, startLevelIdx) {
+    clearTimeout(this.restartTimeout);
+    const sessionId = this.playSessionId;
+
     if (this.hls) {
       this.hls.destroy();
       this.hls = null;
@@ -517,7 +610,8 @@ export class TvPlayer {
     this.videoEl.load();
 
     // Give webOS hardware decoder 150ms to release the hardware pipeline context
-    setTimeout(() => {
+    this.restartTimeout = setTimeout(() => {
+      if (sessionId !== this.playSessionId || !this.isOpen()) return;
       this._initHls(blobUrl, startLevelIdx);
     }, 150);
   }
@@ -526,9 +620,26 @@ export class TvPlayer {
    * Launch a stream
    */
   async playStream(streamData) {
+    const sessionId = ++this.playSessionId;
+    clearTimeout(this.restartTimeout);
+    clearTimeout(this.waitingTimeout);
+
+    if (this.hls) {
+      this.hls.destroy();
+      this.hls = null;
+    }
+
     this.currentStreamData = streamData;
     this.currentChannel = streamData.userLogin;
     this.currentSelectedLevel = -1; // reset to auto
+    this.lastPlayheadTime = -1;
+    this.lastPlayheadAdvance = 0;
+    this.lastShownToastLabel = '';
+    this.mediaRecoveryAttempts = 0;
+    this.lastMediaRecoveryTime = 0;
+    this.networkErrorAttempts = 0;
+    this.lastNetworkErrorTime = 0;
+    this.fallbackAttempt = 0;
 
     // Show player
     this.containerEl.classList.remove('hidden');
@@ -543,13 +654,23 @@ export class TvPlayer {
     this.viewersEl.textContent = streamData.viewers ? `${streamData.viewers.toLocaleString('ru-RU')} зрителей` : '';
     this.qualityLabelEl.textContent = 'Auto';
 
+    if (streamData.isLive === false) {
+      this.hideSpinner();
+      this.streamTitleEl.textContent = 'Канал сейчас не в эфире (Offline)';
+      this.showOsd();
+      return;
+    }
+
     try {
-      // 1. Fetch playback access token (passes OAuth token if user is signed in to eliminate anti-bot ad slates)
+      // 1. Fetch playback access token (anonymous first to prevent SSAI ad targeting, with token fallback)
       const authToken = getStoredToken();
       const { sig, token } = await fetchPlaybackAccessToken(this.currentChannel, authToken);
+      if (sessionId !== this.playSessionId || !this.isOpen()) return;
 
       // 2. Fetch live master playlist via ReYohoho proxy
       const { manifest, serverUrl } = await fetchLiveManifest(this.currentChannel, sig, token);
+      if (sessionId !== this.playSessionId || !this.isOpen()) return;
+
       this.lastUsedProxy = serverUrl;
       this.currentRawManifest = manifest;
 
@@ -562,6 +683,7 @@ export class TvPlayer {
       // 4. Initialize Hls.js with TV-safe limits (start in auto mode so MANIFEST_PARSED selects optimal level)
       this._initHls(this.currentBlobUrl, -1);
     } catch (err) {
+      if (sessionId !== this.playSessionId || !this.isOpen()) return;
       console.error('[TvPlayer] Playback start failed:', err);
       this.hideSpinner();
       this.streamTitleEl.textContent = `Ошибка загрузки стрима: ${err.message}. Нажмите кнопку перезагрузки для повтора.`;
@@ -618,6 +740,7 @@ export class TvPlayer {
       this.hls.on(Hls.Events.FRAG_BUFFERED, () => {
         clearTimeout(this.waitingTimeout);
         this.hideSpinner();
+        this.networkErrorAttempts = 0;
       });
 
       this.hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
@@ -628,49 +751,19 @@ export class TvPlayer {
           const pref = getPreferredQuality();
           if (pref === 'max') {
             // Find highest resolution level (1440p60 if available, else 1080p60)
-            let bestIdx = data.levels.length - 1;
-            let bestHeight = data.levels[bestIdx]?.height || 0;
-            let bestBitrate = data.levels[bestIdx]?.bitrate || 0;
-            for (let i = 0; i < data.levels.length; i++) {
-              const lvl = data.levels[i];
-              const h = lvl.height || 0;
-              const b = lvl.bitrate || 0;
-              if (h > bestHeight || (h === bestHeight && b > bestBitrate)) {
-                bestHeight = h;
-                bestBitrate = b;
-                bestIdx = i;
-              }
-            }
+            let bestIdx = this._pickBestLevelForHeight(data.levels, 9999, false);
+            if (bestIdx === -1) bestIdx = data.levels.length - 1;
             targetLevel = bestIdx;
           } else if (pref === '1080p') {
-            let bestIdx = -1;
-            for (let i = 0; i < data.levels.length; i++) {
-              if (data.levels[i].height === 1080) { bestIdx = i; break; }
-            }
+            let bestIdx = this._pickBestLevelForHeight(data.levels, 1080, true);
             if (bestIdx === -1) {
-              // If no 1080p, pick highest available
-              let maxH = 0;
-              for (let i = 0; i < data.levels.length; i++) {
-                if ((data.levels[i].height || 0) > maxH) {
-                  maxH = data.levels[i].height || 0;
-                  bestIdx = i;
-                }
-              }
+              bestIdx = this._pickBestLevelForHeight(data.levels, 9999, false);
             }
             if (bestIdx !== -1) targetLevel = bestIdx;
           } else if (pref === '720p') {
-            let bestIdx = -1;
-            for (let i = 0; i < data.levels.length; i++) {
-              if (data.levels[i].height === 720) { bestIdx = i; break; }
-            }
+            let bestIdx = this._pickBestLevelForHeight(data.levels, 720, true);
             if (bestIdx === -1) {
-              let maxH = 0;
-              for (let i = 0; i < data.levels.length; i++) {
-                if ((data.levels[i].height || 0) <= 720 && (data.levels[i].height || 0) > maxH) {
-                  maxH = data.levels[i].height || 0;
-                  bestIdx = i;
-                }
-              }
+              bestIdx = this._pickBestLevelForHeight(data.levels, 720, false);
             }
             if (bestIdx !== -1) targetLevel = bestIdx;
           }
@@ -681,10 +774,8 @@ export class TvPlayer {
           this.currentSelectedLevel = targetLevel;
 
           const lvl = data.levels[targetLevel];
-          const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Custom';
-          const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
-          this.qualityLabelEl.textContent = res;
-          this.showQualityToast(`${res}${isHevc ? ' [HEVC]' : ''}`);
+          this.qualityLabelEl.textContent = this._formatLevelRes(lvl);
+          this.showQualityToast(this._formatLevelToast(lvl));
         }
 
         this.videoEl.play().catch(e => {
@@ -693,32 +784,68 @@ export class TvPlayer {
       });
 
       this.hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
-        const lvl = this.hls.levels[data.level];
+        const lvl = this.hls ? this.hls.levels[data.level] : null;
         if (lvl) {
-          const res = lvl.height ? `${lvl.height}p${lvl.frameRate && lvl.frameRate >= 50 ? Math.round(lvl.frameRate) : ''}` : 'Auto';
-          const isHevc = isHevcCodec(lvl.videoCodec) || (lvl.height && lvl.height >= 1440);
-          const fullLabel = `${res}${isHevc ? ' [HEVC]' : ''}`;
+          const res = this._formatLevelRes(lvl);
+          const fullLabel = this._formatLevelToast(lvl);
           if (this.currentSelectedLevel === -1) {
             this.qualityLabelEl.textContent = `Auto (${res})`;
           } else {
             this.qualityLabelEl.textContent = res;
           }
-          this.showQualityToast(fullLabel);
+          if (fullLabel && this.lastShownToastLabel !== fullLabel) {
+            this.showQualityToast(fullLabel);
+          }
         }
       });
 
       this.hls.on(Hls.Events.ERROR, (_event, data) => {
         console.warn('[TvPlayer] Hls error:', data.type, data.details, data.fatal);
         if (data.fatal) {
+          const now = Date.now();
           switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[TvPlayer] Fatal network error, reloading...');
-              this.hls.startLoad();
+            case Hls.ErrorTypes.NETWORK_ERROR: {
+              const httpStatus = data.response && data.response.code;
+              if (now - this.lastNetworkErrorTime > 15000) {
+                this.networkErrorAttempts = 0;
+              }
+              this.lastNetworkErrorTime = now;
+              this.networkErrorAttempts++;
+
+              if (httpStatus === 404 || httpStatus === 410) {
+                console.error('[TvPlayer] Stream returned HTTP', httpStatus);
+                this.hideSpinner();
+                this.streamTitleEl.textContent = 'Трансляция завершена или недоступна. Нажмите «Обновить» или «Назад».';
+                this.showOsd();
+              } else if (this.networkErrorAttempts <= 2 && this.hls) {
+                console.log(`[TvPlayer] Fatal network error (${this.networkErrorAttempts}/2), retrying startLoad...`);
+                this.hls.startLoad();
+              } else if (this.networkErrorAttempts === 3) {
+                console.warn('[TvPlayer] Persistent network error, refreshing manifest/proxy...');
+                this.reload();
+              } else {
+                this.hideSpinner();
+                this.streamTitleEl.textContent = 'Потеряно соединение с сервером стрима. Нажмите «Обновить».';
+                this.showOsd();
+              }
               break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[TvPlayer] Fatal media error, recovering media...');
-              this.hls.recoverMediaError();
+            }
+            case Hls.ErrorTypes.MEDIA_ERROR: {
+              if (now - this.lastMediaRecoveryTime > 10000) {
+                this.mediaRecoveryAttempts = 0;
+              }
+              this.lastMediaRecoveryTime = now;
+              this.mediaRecoveryAttempts++;
+
+              if (this.mediaRecoveryAttempts === 1 && this.hls) {
+                console.log('[TvPlayer] Fatal media error, attempting recoverMediaError...');
+                this.hls.recoverMediaError();
+              } else {
+                console.warn('[TvPlayer] Repeated media error, stepping down quality...');
+                this._fallbackToStableQuality();
+              }
               break;
+            }
             default:
               console.error('[TvPlayer] Unrecoverable error, falling back to stable quality...');
               this._fallbackToStableQuality();
@@ -739,15 +866,31 @@ export class TvPlayer {
   }
 
   close() {
-    this._stopStatsLoop();
-    this.closeQualityDialog();
-
+    this.playSessionId++;
+    clearTimeout(this.restartTimeout);
     clearTimeout(this.waitingTimeout);
+    clearTimeout(this.osdTimeout);
+    clearTimeout(this.toastTimeout);
+    clearTimeout(this.toastHideTimeout);
+
+    this._stopStatsLoop();
+    this.isStatsVisible = false;
+    if (this.statsOverlayEl) {
+      this.statsOverlayEl.classList.add('hidden');
+    }
+
+    if (this.isQualityDialogVisible) {
+      this.closeQualityDialog(false);
+    }
 
     if (this.qualityToastEl) {
-      clearTimeout(this.toastTimeout);
       this.qualityToastEl.classList.add('toast-hide');
       this.qualityToastEl.classList.add('hidden');
+    }
+
+    if (this.osdEl) {
+      this.osdEl.classList.remove('visible');
+      this.osdEl.classList.add('hidden');
     }
 
     if (this.hls) {
@@ -764,6 +907,8 @@ export class TvPlayer {
     this.videoEl.removeAttribute('src');
     this.videoEl.load();
 
+    this.lastPlayheadTime = -1;
+    this.lastPlayheadAdvance = 0;
     this.containerEl.classList.add('hidden');
     this.currentChannel = null;
     this.currentStreamData = null;

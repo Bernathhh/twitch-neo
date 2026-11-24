@@ -169,6 +169,20 @@ html, body {
   color: var(--text-secondary);
 }
 
+.btn-retry {
+  margin-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--brand-purple);
+  color: #fff;
+  border: none;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
 /* Search Input */
 .search-bar-container {
   margin-bottom: 36px;
@@ -229,6 +243,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 24px;
   padding: 20px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -241,6 +256,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .setting-name {
@@ -261,6 +277,8 @@ html, body {
   border-radius: 8px;
   font-size: 16px;
   font-weight: 700;
+  align-self: flex-start;
+  flex-shrink: 0;
 }
 
 .setting-static-badge {
@@ -271,6 +289,8 @@ html, body {
   border-radius: 8px;
   font-size: 16px;
   font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .selector-row {
