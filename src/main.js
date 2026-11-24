@@ -540,10 +540,10 @@ class TwitchNativeApp {
       this.defaultQualityContainer.innerHTML = '';
       const currentPref = getPreferredQuality();
       const qualityOptions = [
-        { id: 'max', label: 'МАКСИМУМ (1440p / Source)' },
+        { id: 'max', label: '1440p / Макс' },
         { id: '1080p', label: '1080p60' },
         { id: '720p', label: '720p60' },
-        { id: 'auto', label: 'АВТО' }
+        { id: 'auto', label: 'Авто' }
       ];
 
       qualityOptions.forEach(opt => {

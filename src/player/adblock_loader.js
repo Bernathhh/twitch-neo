@@ -46,9 +46,20 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
   const cleanLines = [];
   let inCueOut = false;
   let liveFound = 0;
+  let skippedBeforeFirstLive = 0;
+  let seenFirstLive = false;
+  let origMediaSeq = -1;
+  let mediaSeqLineIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
+      origMediaSeq = parseInt(line.replace('#EXT-X-MEDIA-SEQUENCE:', '').trim(), 10);
+      mediaSeqLineIdx = cleanLines.length;
+      cleanLines.push(line);
+      continue;
+    }
 
     if (line.includes('EXT-X-CUE-OUT')) {
       inCueOut = true;
@@ -73,11 +84,15 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
       const isLive = line.includes(',live');
       if (inCueOut || !isLive || line.includes('Amazon')) {
         // Skip ad segment and its URL
+        if (!seenFirstLive) {
+          skippedBeforeFirstLive++;
+        }
         if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
           i++;
         }
         continue;
       } else {
+        seenFirstLive = true;
         liveFound++;
         cleanLines.push(line);
         if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
@@ -96,16 +111,25 @@ export function filterAdMediaPlaylist(text, recoveryCache) {
   }
 
   if (liveFound > 0) {
-    return cleanLines.join('\n');
+    if (origMediaSeq >= 0 && mediaSeqLineIdx >= 0 && skippedBeforeFirstLive > 0) {
+      cleanLines[mediaSeqLineIdx] = `#EXT-X-MEDIA-SEQUENCE:${origMediaSeq + skippedBeforeFirstLive}`;
+    }
+    const cleanText = cleanLines.join('\n');
+    if (recoveryCache) {
+      recoveryCache.lastCleanText = cleanText;
+      recoveryCache.lastCleanTime = Date.now();
+    }
+    return cleanText;
   }
 
   // If ALL segments in this poll were ad segments:
-  // Reuse last clean playlist if recent (< 60s) to prevent player stalling or playing the commercial break
-  if (recoveryCache && recoveryCache.lastCleanText && (Date.now() - recoveryCache.lastCleanTime < 60000)) {
+  // Never return an empty playlist (cleanLines without segments causes fatal LEVEL_EMPTY_ERROR).
+  // Allow bridging 1 poll cycle (< 3500ms) if recent, otherwise return text to keep player alive.
+  if (recoveryCache && recoveryCache.lastCleanText && (Date.now() - recoveryCache.lastCleanTime < 3500)) {
     return recoveryCache.lastCleanText;
   }
 
-  return cleanLines.length > 3 ? cleanLines.join('\n') : text;
+  return text;
 }
 
 export function createAdBlockPlaylistLoader() {

@@ -34,7 +34,7 @@
 }
 
 .nav-item {
-  width: 104px;
+  width: 108px;
   height: 84px;
   border-radius: 16px;
   background: transparent;
@@ -82,7 +82,7 @@
   font-weight: 700;
   text-align: center;
   width: 100%;
-  max-width: 96px;
+  max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

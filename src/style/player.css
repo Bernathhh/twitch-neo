@@ -146,7 +146,8 @@
   font-weight: 700;
 }
 
-.osd-btn .btn-text {
+.osd-btn .btn-text,
+#osd-quality-label {
   font-size: 19px;
   font-weight: 700;
   white-space: nowrap;
